@@ -1,0 +1,226 @@
+/*
+   Propagation of a Tsunami wave near Java island: passive generation .
+   
+   to run this scirpt : FreeFem++ sBBM_Java_Passive.edp -ns -v 0
+   
+   WARNING : don't forget to generate the mesh from the folder "mesh_generation"
+   that you wan't to use in this script
+   
+   Copyright (C) 2020 Georges SADAKA and Denys Dutykh
+
+   This program is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+   
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+   
+   You should have received a copy of the GNU General Public License
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+   -------------------------------------------------------------------------------------
+   The main file for propagation of a Tsunami wave near Java island: passive generation
+   -------------------------------------------------------------------------------------
+   Author 1: Georges SADAKA, LMRS -- University of Rouen
+   Author 2: Denys Dutykh, CNRS -- LAMA, USMB          
+   E-mail 1: Georges.SADAKA@univ-rouen.fr                  
+   E-mail 2: Denys.Dutykh@univ-smb.fr   
+   Web 1:  http://georges-sadaka.fr/ 
+   Web 2:  http://www.denys-dutykh.com/
+   Blog 2:   http://dutykh.github.io/    
+   GitHub 1: https://github.com/GeorgesSadaka/
+   GitHub 2: https://github.com/dutykh/  
+   -----------------------------------------------------------------------
+   Distributed under GNU General Public License      
+   --------------------------------------------------
+*/
+
+verbosity=0;
+load "shell"
+load "medit"
+load "iovtk"
+load "isoline"
+real s0=time();
+bool output=true;
+bool outputadapt=false; // output inside adaptGS
+bool adapt=true;
+bool save=true;
+
+string method="Adapt_GS"; // Adapt_GS or Full
+int Nplot=10,Nsave=50;
+string DIRSAVE="Tsu_Java_Pas_"+method;
+if(method=="Full") adapt=false;
+if(!adapt) DIRSAVE="Tsu_Java_Pas_Full";
+mkdir(DIRSAVE);
+
+bool Wait=false; // wait in the plot
+real waitv=0.;
+if(Wait) waitv=1.;
+real isoadapt=0.03;
+real erradapt=1.e-4;
+real smoothadapt=5.e-9;
+real epsadapt=30.e3;
+if(adapt) cout<<"isoadapt="<<isoadapt<<", erradapt="<<erradapt<<", smoothadapt="<<smoothadapt<<", epsadapt="<<epsadapt<<endl;
+if(adapt) include "../Common_files/adapt_GS.edp"
+macro grad(u)[dx(u),dy(u)]//
+macro div(u,v)(dx(u)+dy(v))//
+macro F(e,u,v,t)(((D+e) * div(u,v) + ([DX,DY]+grad(e))'*[u,v]+A*(-2.*D*DX*DY*dx(v)+2.D*DX^2*dy(v)))*t-A*((2.*D2*DX*dx(u)+D2*DY*dx(v))*dx(t)+(D2*DY*dx(u)+D2*DX*dy(u)+D2*DX*dx(v)+2.*D2*DY*dy(v))*dy(t)))//
+macro G(e,u,v,t)((gr*(1.-2.*B*DX^2-B*DY^2)*dx(e)+dx(u)*(u)+dx(v)*(v)-gr*B*DX*DY*dy(e))*t-gr*2.*B*D*DX*dx(e)*dx(t)-gr*(B*D*DY*dx(e)+B*D*DX*dy(e))*dy(t))//
+macro H(e,u,v,t)((-gr*(2.*B*DX*DY)*dx(e)+dy(u)*(u)+dy(v)*(v)+gr*(1.-2*B*DY^2)*dy(e))*t-gr*B*D*DY*dx(e)*dx(t)-gr*(B*D*DX*dx(e)+2.*B*D*DY*dy(e))*dy(t))//
+real theta2=2./3.,theta=sqrt(theta2),mu0=(4.-6.*theta2)/(3.*(1.-theta2)), nu0=0.;//BBM_BBM
+real a=.5*(theta2-1./3.)*nu0, b=.5*(theta2-1./3.)*(1.-nu0), c=.5*(1-theta2)*mu0, d=.5*(1-theta2)*(1.-mu0);
+real A=-.5*((theta-1.)^2-1./3.),B=1.-theta;
+real gr=9.81;
+real T=1750.; // Final simulation time in s
+string filename="../Common_files/java2006-787.xyz";
+mesh TSh=triangulate(filename);
+fespace VSh(TSh,P1);   VSh fxy,fxySh,Dref;
+real aamin = TSh[0][0].x,bbmax = TSh[TSh.nt-1][0].x,ddmin = TSh[0][0].y,ccmax = TSh[TSh.nt-1][0].y;
+real lon0=.5*(aamin+bbmax);
+real lat0=.5*(ddmin+ccmax);
+real Requator=6378137.,Rpole=6356752.;
+real R=sqrt(((Requator^2*cos(lat0*pi/180.))^2+(Rpole^2*sin(lat0*pi/180.))^2)/((Requator*cos(lat0*pi/180.))^2+(Rpole*sin(lat0*pi/180.))^2));
+real coefl0=pi*R/180.;
+int j=0,nyj=0;
+real Y0=0.;
+{ ifstream file(filename);real xx,yy;
+   for(int i=0;i<fxySh.n;i++){
+      file >> xx >>yy >> fxySh[][i];
+      if(i==0){
+         Y0=yy;
+         nyj++;
+      } else if (i>0 && Y0==yy)
+         nyj++;
+      j++;
+   }
+}
+int M= nyj-1, N=fxySh.n/nyj-1;
+VSh usm,vsm;
+real asm=2.e1;
+func gsm=0.;
+solve smoothbot(usm,vsm,solver=GMRES)=int2d(TSh)(asm*usm*vsm+grad(usm)'*grad(vsm))-int2d(TSh)(asm*fxySh*vsm)+int1d(TSh,1,2,3,4)(gsm*vsm);
+fxySh=(usm<0.5)-(usm>=0.5);
+for(int i=0;i<VSh.ndof;i++)
+{   if (usm[][i]>=-100.)
+      usm[][i]=-100.;
+}
+Dref = -usm;
+TSh=movemesh(TSh,[(x-lon0)*cos(y*pi/180.)*coefl0,(y-lat0)*coefl0]);
+aamin = TSh[0][0].x;bbmax = TSh[TSh.nt-1][0].x;ddmin = TSh[0][0].y;ccmax = TSh[TSh.nt-1][0].y;
+VSh tmp;tmp[]=Dref[];Dref=0;Dref[]=tmp[];
+macro movedegkmX(x0,y0)( (x0-lon0)*cos(y0*pi/180.)*coefl0 ) //
+macro movedegkmY(y0)( (y0-lat0)*coefl0 ) //
+real L = 100.*1e3;// Subfault length
+real W = 50.*1e3;// Subfault width
+real eps=1.e-16; // numerical error for Okada
+real x0 = movedegkmX(107.345,-9.295);
+real y0 = movedegkmY(-9.295);
+real t = 0.0; // current time
+real dt = 1.; // time increment in s
+real rhowater=1270.;
+mesh Th=readmesh("../Common_files/Java_eps_0.01_alpha_100_Dx_0.03.msh");
+Th=movemesh(Th,[(x-lon0)*cos(y*pi/180.)*coefl0,(y-lat0)*coefl0]);
+mesh Thinit=Th;
+real Dx=2.*checkmovemesh(Thinit,[x,y]);
+fespace Wh(Th,P1);
+real aa=x0-3.2*W,bb=x0+1.2*W,cc=y0-L,dd=y0+L;
+if(adapt) Th=trunc(Thinit,(1.*(x <= bb & x >= aa) *(y <= dd & y >= cc))>.5,label=0);
+Wh w,D,D2,DX,DY;
+D = Dref;D2 = D^2;DX = dx(D);DY = dy(D);
+{   real delta = 10.35*pi/180.0;
+   real phi = -(288.94 - 90.0)*pi/180.0;
+   real rake = 95.0*pi/180.0;
+   real d = 10.e3 + W*sin(delta);
+   real slip = 2.;// m/s
+   real vp = 6000.;// P-wave velocity
+   real vs = 3400.;// S-wave velocity
+   real rhoc = 2700.;// crust density
+   real mu = vs^2*rhoc;
+   real lambda = (vp^2*rhoc - 2.*mu);// Lame coefficients
+   include "../Common_files/OkadaSol.edp"
+   for (int i=0;i<w.n;i++){
+      if (abs(w[](i))>=min(abs(w[].min),abs(w[].max))/9.2)
+         w[](i)=w[](i);
+      else
+         w[](i)=0.;
+   }
+   { ofstream file("w.txt");   file << w[];}
+}
+{   ifstream file("w.txt");   file >> w[];   }
+if (output) plot(w,fill=true,dim=2,value=true,wait=waitv,cmm="Inital data for eta");
+Wh MAX=-10.,Peta0,MAXp,FOND=-D;
+fespace Vh(Th,[P1,P1,P1]);
+Vh [eta, u1, u2], [eta0,u0,v0]=[w,0.,0.],[te,tu,tv];
+Vh [eta0pk1, u0pk1, v0pk1], [etak1, uk1, vk1], [etak2, uk2, vk2];
+{
+   ofstream mat(DIRSAVE+"/Gauge_Tsunami_Java_Pas_"+method+".m");
+   mat<<"#Time_gauge1_gauge2_gauge3_gauge4_cputime_Ndof_NRJP_NRJK"<<endl;
+}
+real gauge1,gauge2,gauge3,gauge4,NRJP,NRJK;
+func ge=0.;   func gu=0.;   func gv=0.;
+int m=0,km=0;
+int[int] fforder2=[1,1,1];
+for (t=0.;t<=T;t+=dt) {
+   if ( ( !(m % 50) ) & adapt ){
+      Wh uadapt=eta0+u0+v0;
+      if(output){
+         plot(uadapt,fill=true,dim=2,value=true,wait=waitv,cmm="uadapt"+uadapt[].max+"min"+uadapt[].min);
+         Peta0=(abs(uadapt)>erradapt);
+         plot(Peta0,fill=true,dim=2,value=true,wait=waitv,cmm="Peta0");
+      }
+      if(adapt){
+         mesh Thp=Th;
+            { AdaptGS(Thp,uadapt,erradapt,isoadapt,smoothadapt,epsadapt,Thinit,outputadapt,waitv); }
+         fespace Whp(Thp,P1);
+         Wh peta0=eta0,pu0=u0,pv0=v0;
+         Whp Dp,MINp,MAXp,eta0p,u0p,v0p,tD;
+         matrix BWinterp=interpolate(Wh,Whp,inside=true);
+         BWinterp=BWinterp';
+         eta0p[]=BWinterp*peta0[];
+         u0p[]=BWinterp*pu0[];
+         v0p[]=BWinterp*pv0[];
+         MAXp[]=BWinterp*MAX[];
+         Th=Thp;
+         [eta0,u0,v0]=[eta0p,u0p,v0p];   D=Dref;   FOND=-D;
+         D2 = D^2;DX = dx(D);DY = dy(D);
+         MAX=MAXp;
+      }
+   }
+   Peta0 = eta0;
+   gauge1=Peta0(x0,y0);
+   gauge2=Peta0(movedegkmX(106.5,-8.),movedegkmY(-8.));
+   gauge3=Peta0(movedegkmX(105.9,-10.35),movedegkmY(-10.35));
+   gauge4=Peta0(movedegkmX(107.7,-11.),movedegkmY(-11.));
+   NRJP=.5*rhowater*9.81*int2d(Th)(Peta0^2);
+   NRJK=.5*rhowater*int2d(Th)((Peta0+D)*(u0^2+v0^2));
+   { ofstream mat(DIRSAVE+"/Gauge_Tsunami_Java_Pas_"+method+".m",append);
+      mat<<t<<" "<<gauge1<<" "<<gauge2<<" "<<gauge3<<" "<<gauge4<<" "<<time()-s0<<" "<<Wh.ndof<<" "<<NRJP<<" "<<NRJK<<endl;
+   }
+   if(!(m % 10)) cout<<"time = "<<t<<", gauge1 = "<<gauge1<<", gauge2 = "<<gauge2<<", gauge3 = "<<gauge3<<", gauge4 = "<<gauge4<<", cputime = "<<time()-s0<<", ndof = "<<Wh.ndof<<", NRJP = "<<NRJP<<", NRJK = "<<NRJK<<endl;
+   if(save && !(m % Nsave)){
+      for (int i=0;i<Th.nt;i++){ 
+         for (int j=0; j < 3; j++)
+            MAX[][Wh(i,j)]=max(MAX[][Wh(i,j)],Peta0[][Wh(i,j)]);
+         MAX[][Wh(i,0)]=max(MAX[][Wh(i,0)],Peta0[][Wh(i,0)]);
+      }
+      FOND=-D;
+      for (int i=0;i<Th.nt;i++){ 
+         for (int j=0; j < 3; j++)
+            MAX[][Wh(i,j)]=max(MAX[][Wh(i,j)],Peta0[][Wh(i,j)]);
+         MAX[][Wh(i,0)]=max(MAX[][Wh(i,0)],Peta0[][Wh(i,0)]);
+      }
+      savevtk(DIRSAVE+"/Propagation_Tsu_Java_Pas_"+method+"."+(100000+km)+".vtu",Th,FOND,Peta0,order=fforder2,dataname="bottom solution", bin=true);
+      savemesh(Th,DIRSAVE+"/Tsunami_Java_Pas_"+method+"_BBM_MAX."+(100000+km)+".mesh");
+      savesol(DIRSAVE+"/Tsunami_Java_Pas_"+method+"_BBM_MAX."+(100000+km)+".sol",Th,MAX);
+      savemesh(Th,DIRSAVE+"/Tsunami_Java_Pas_"+method+"_BBM_SOL."+(100000+km)+".mesh");
+      savesol(DIRSAVE+"/Tsunami_Java_Pas_"+method+"_BBM_SOL."+(100000+km)+".sol",Th,Peta0);
+      km++;
+   }
+   if(output && !(m % Nplot)) plot(eta0,fill=true,value=true,dim=2,wait=waitv,cmm="eta0, t= "+t);
+   include "sBBM_RK2_Passive_problem.edp"
+   m++;
+}
+cout << " CPU time = " << time()-s0 << endl;

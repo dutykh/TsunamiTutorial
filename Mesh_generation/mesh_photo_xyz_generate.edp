@@ -1,0 +1,303 @@
+/*
+   Build the mesh from an image file or a xyz bathymetrie
+   Users of this script must choose the corresponding value for epsilon, alpha, Dx, type,
+   resizenc, nc, output
+   
+   to run this script : FreeFem++ mesh_photo_xyz_generate.edp -ns -v 0
+
+   Copyright (C) 2020 Georges SADAKA and Denys Dutykh
+
+   This program is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+   
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+   
+   You should have received a copy of the GNU General Public License
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+   -----------------------------------------------------------------------
+   The main file for building mesh from an image file or a xyz bathymetrie
+   -----------------------------------------------------------------------
+   Author 1: Georges SADAKA, LMRS -- University of Rouen
+   Author 2: Denys Dutykh, CNRS -- LAMA, USMB          
+   E-mail 1: Georges.SADAKA@univ-rouen.fr                  
+   E-mail 2: Denys.Dutykh@univ-smb.fr   
+   Web 1:  http://georges-sadaka.fr/ 
+   Web 2:  http://www.denys-dutykh.com/
+   Blog 2:   http://dutykh.github.io/    
+   GitHub 1: https://github.com/GeorgesSadaka/
+   GitHub 2: https://github.com/dutykh/  
+   -----------------------------------------------------------------------
+   Distributed under GNU General Public License      
+   --------------------------------------------------
+*/
+
+real epsilon;// the more epsilon is close to zero, the more u takes values equal to 1 and -1
+real alpha;// alpha set the balance between length of the curve and fitting the actual interface: the more alpha is big the closest is the better is the approximation
+real Dx;// mesh step space size
+string type="photo";// photo or xyz
+bool meshinside;// choose the region you want to mesh
+bool resizenc=false;// to creat mesh around special zone
+bool output=true;// to plot
+verbosity=0.;
+load "ppm2rnm"
+load "isoline"
+string filename;
+mesh Sh;
+fespace Vh(Sh,P1);   Vh fxy;
+int nx,ny;
+real xmin,xmax,ymin,ymax;
+if(type=="photo"){
+   filename="complex.pgm";//mediterannee.pgm
+   real[int,int] f1(filename);
+   epsilon=1.;   alpha=1.;   Dx=1.5;
+   meshinside=true;
+   nx = f1.n; ny=f1.m;
+   Sh=square(nx-1,ny-1,[(nx-1)*(x),(ny-1)*(1-y)]);
+   fxy[]=f1;
+   xmin=0.;xmax=nx-1.;ymin=ny-1.;ymax=0.;
+}
+if(type=="xyz"){
+   filename="../Common_files/java2006-787.xyz";
+   Sh=triangulate(filename);
+   meshinside=true;
+   epsilon=.01;   alpha=100.;
+   Dx=abs(Sh(1).x-Sh(0).x);
+   Dx=.03;
+   int j=0,nyj=0;
+   real Y0=0.;
+   { ifstream file(filename);real xx,yy;
+      for(int i=0;i<fxy.n;i++){
+         file >> xx >>yy >> fxy[][i];
+         if(i==0){
+            Y0=yy;
+            nyj++;
+            xmin=xx;
+            ymin=yy;
+         } else if (i>0 && Y0==yy)
+            nyj++;
+         if(i==fxy.n-1){
+            xmax=xx;
+            ymax=yy;
+         }
+         j++;
+      }
+   }
+   nx = nyj; ny=fxy.n/nyj;
+   Vh usm,vsm;
+   real asm=5000.;
+   func gsm=0.;
+   macro grad(u)[dx(u),dy(u)]//
+   solve smooth(usm,vsm)=int2d(Sh)(asm*usm*vsm+grad(usm)'*grad(vsm))-int2d(Sh)(asm*fxy*vsm)+int1d(Sh,1,2,3,4)(gsm*vsm);
+   fxy=usm;
+}
+mesh Shinit=Sh;   fespace Vhinit(Shinit,P1);
+Vhinit fxyinit;
+fxy=(fxy>=0.5)-(fxy<0.5);
+if(meshinside) fxy=-fxy;
+real[int] Upvalue(nx),Downvalue(nx),Leftvalue(ny),Rightvalue(ny);
+Upvalue(0:nx-1)=fxy[](0:nx-1);
+Downvalue(0:nx-1)=fxy[](Vh.ndof-nx:Vh.ndof-1);
+for (int j=0;j <=(ny-1);j++) Rightvalue(j) =fxy[](nx-1+j*nx);
+for (int j=0;j <=(ny-1);j++) Leftvalue(j)=fxy[](j*nx);
+real Upout,Downout,Rightout,Leftout;
+if(fxy[].min==Upvalue.max)  Upout=1.;
+if(fxy[].min==Downvalue.max)  Downout=1.;
+if(fxy[].min==Rightvalue.max)  Rightout=1.;
+if(fxy[].min==Leftvalue.max)  Leftout=1.;
+if(output) plot(fxy);
+fespace Wh(Sh,P0);
+{
+   macro grad(u) [dx(u),dy(u)] //
+   Vh u=0.,du,v;
+   problem regularization(du,v,solver=GMRES)=
+         int2d(Sh)(2.*epsilon*(grad(du)'*grad(v))+4.*(u)^2*du*v/epsilon + alpha*du*v)
+         +int2d(Sh)(epsilon*(grad(u)'*grad(v)) - 2.*(1.-u^2)*u*v/epsilon)
+         +int2d(Sh,qft=qf1pTlump)(alpha*(u-fxy)*v);
+   regularization;u=u+du;
+   Sh=adaptmesh(Sh,u,nbvx=1e7);
+   regularization;u=u+du;
+   fxy=u;
+}
+if(output)plot(fxy);
+fxyinit=fxy;
+real[int,int] Curves(3,1);
+int[int] be(1);
+int nc=isoline(Shinit,fxyinit,iso=0.,close=0,Curves,beginend=be,smoothing=.005,ratio=0.1);
+border GC(t=0,1;i) { P=Curve(Curves,be(i*2),be(i*2+1)-1,t);label=2/*i+1*/;}
+int[int]  NN(nc);
+real[int]  Downpointstart(nc*2),Downpointend(nc*2),Leftpointstart(nc*2),Leftpointend(nc*2);
+real[int]  Uppointstart(nc*2),Uppointend(nc*2),Rightpointstart(nc*2),Rightpointend(nc*2);
+int PLeftstart=0, PRightstart=0, PDownstart=0, PUpstart=0, PLeftend=0, PRightend=0, PDownend=0, PUpend=0;
+string Down="Down",Up="Up",Left="Left",Right="Right";
+real eps=1.e-10;// numerical error in order to capt the right border of the curve due to the regularization
+real Pbxy, Pexy, Pxym, sign;
+macro Pointoncurve(POS)
+   Pbxy=Pbx*(#POS=="Left"|#POS=="Right")+Pby*(#POS=="Down"|#POS=="Up");
+   Pexy=Pex*(#POS=="Left"|#POS=="Right")+Pey*(#POS=="Down"|#POS=="Up");
+   Pxym=xmin*(#POS=="Left")+xmax*(#POS=="Right")+ymax*(#POS=="Down")+ymin*(#POS=="Up");
+   if(abs(Pbxy-Pxym)<eps|abs(Pexy-Pxym)<eps){
+      if(abs(Pbxy-Pxym)<eps && abs(Pexy-Pxym)<eps){
+         #POS#pointstart[P#POS#start]=Pby*(#POS=="Left"|#POS=="Right")+Pbx*(#POS=="Down"|#POS=="Up");
+         #POS#pointend[P#POS#end]=Pey*(#POS=="Left"|#POS=="Right")+Pex*(#POS=="Down"|#POS=="Up");
+         P#POS#start++;
+         P#POS#end++;
+      } else
+         if(abs(Pbxy-Pxym)<eps){
+            #POS#pointstart[P#POS#start]=Pby*(#POS=="Left"|#POS=="Right")+Pbx*(#POS=="Down"|#POS=="Up");
+            P#POS#start++;
+         } else {
+            #POS#pointend[P#POS#end]=Pey*(#POS=="Left"|#POS=="Right")+Pex*(#POS=="Down"|#POS=="Up");
+            P#POS#end++;
+         }
+   }
+//
+for [i,ni : NN] {
+   ni = Curves(2,be(i*2+1)-1)/Dx;
+   real Pbx=Curve(Curves,be(i*2),be(i*2+1)-1,0).x, Pex=Curve(Curves,be(i*2),be(i*2+1)-1,1).x;
+   real Pby=Curve(Curves,be(i*2),be(i*2+1)-1,0).y, Pey=Curve(Curves,be(i*2),be(i*2+1)-1,1).y;
+   Pointoncurve(Left);Pointoncurve(Right);Pointoncurve(Down);Pointoncurve(Up);
+}
+macro Pointonbord(POS)
+   #POS#pointstart.resize(P#POS#start);   #POS#pointend.resize(P#POS#end);
+   real n#POS#point=P#POS#start+P#POS#end+2;
+   real[int]  #POS#point(n#POS#point);
+   #POS#point=[#POS#pointstart,#POS#pointend];
+   #POS#pointstart.sort;   #POS#pointend.sort;
+   sign=1.*(#POS=="Right"|#POS=="Down")-1.*(#POS=="Left"|#POS=="Up");
+   if(P#POS#start==0 && P#POS#end==0)
+      #POS#point=[ymin,ymax]*(#POS=="Left"|#POS=="Right")+[xmin,xmax]*(#POS=="Down"|#POS=="Up");
+   else if(P#POS#start==0)
+      #POS#point=[#POS#point,ymax*(#POS=="Left")+ymin*(#POS=="Right")+xmax*(#POS=="Down")+xmin*(#POS=="Up")];
+   else if(P#POS#end==0)
+      #POS#point=[#POS#point,ymin*(#POS=="Left")+ymax*(#POS=="Right")+xmin*(#POS=="Down")+xmax*(#POS=="Up")];
+   else {
+      if (sign*#POS#pointstart[0] <=sign*#POS#pointend[0] & xmin*(#POS=="Down"|#POS=="Up")+ymax*(#POS=="Left"|#POS=="Right")<#POS#pointstart[0])
+      #POS#point=[#POS#point,xmin*(#POS=="Down"|#POS=="Up")+ymax*(#POS=="Left"|#POS=="Right")];
+      if (sign*#POS#pointstart[P#POS#start-1] <=sign*#POS#pointend[P#POS#end-1] & #POS#pointend[P#POS#end-1]<xmax*(#POS=="Down"|#POS=="Up")+ymin*(#POS=="Left"|#POS=="Right"))
+         #POS#point=[#POS#point,xmax*(#POS=="Down"|#POS=="Up")+ymin*(#POS=="Left"|#POS=="Right")];
+   }
+   #POS#point.sort;
+   border GB#POS(t=0,1;i){x=((xmax*(#POS=="Right")+xmin*(#POS=="Left")))+#POS#point[2*i]*((1.-t)*(#POS=="Down")+t*(#POS=="Up"))+#POS#point[2*i+1]*(t*(#POS=="Down")+(1.-t)*(#POS=="Up"));y=#POS#point[2*i]*(t*(#POS=="Left")+(1.-t)*(#POS=="Right"))+#POS#point[2*i+1]*((1.-t)*(#POS=="Left")+t*(#POS=="Right"))+(ymax*(#POS=="Down")+ymin*(#POS=="Up"));label=1;}
+   int[int]  #POS#bord(#POS#point.n/2);
+   for (int i=0;i<#POS#bord.n;i++)
+      #POS#bord(i)=floor(abs(#POS#point[2*i+1]-#POS#point[2*i])/Dx);
+   if(output)plot(fxy,GB#POS(#POS#bord));
+//
+mesh Thall;
+if(resizenc) nc=2;// we put here a number between 0 and nc in order to creat mesh around special zone
+int resizeNN=0;
+for(int i=0;i<nc;i++)
+   if(NN(i)>1){// to delete curve with one point
+      NN(i)=NN(i);
+      resizeNN++;
+   }
+NN.resize(resizeNN);
+//macro GG(i) border G#i(t=0,1) {P=Curve(Curves,be(i*2),be(i*2+1)-1,t);}// 
+//GG(1)   plot(G1(20));
+if(Upout==1. && Downout==1. && Rightout==1. && Leftout==1. && nc==0.){
+   Pointonbord(Down);Pointonbord(Up);Pointonbord(Left);Pointonbord(Right);
+   func bordfinal=GBDown(Downbord)+GBLeft(Leftbord)+GBUp(Upbord)+GBRight(Rightbord);
+   if(output)plot(bordfinal);
+   Thall=buildmesh(bordfinal);
+}
+if(Upout==1. && Downout==1. && Rightout==1. && Leftout==1. && nc!=0.){
+   func bordfinal=GC(NN);
+   if(output)plot(bordfinal);
+   Thall=buildmesh(bordfinal);
+}
+if(Upout!=1. && Downout==1. && Rightout==1. && Leftout==1.){
+   Pointonbord(Up);
+   func bordfinal=GC(NN)+GBUp(Upbord);
+   if(output)plot(bordfinal);
+   Thall=buildmesh(bordfinal);
+}
+if(Upout==1. && Downout!=1. && Rightout==1. && Leftout==1.){
+   Pointonbord(Down);
+   func bordfinal=GC(NN)+GBDown(Downbord);
+   if(output)plot(bordfinal);
+   Thall=buildmesh(bordfinal);
+}
+if(Upout==1. && Downout==1. && Rightout!=1. && Leftout==1.){
+   Pointonbord(Right);
+   func bordfinal=GC(NN)+GBRight(Rightbord);
+   if(output)plot(bordfinal);
+   Thall=buildmesh(bordfinal);
+}
+if(Upout==1. && Downout==1. && Rightout==1. && Leftout!=1.){
+   Pointonbord(Left);
+   func bordfinal=GC(NN)+GBLeft(Leftbord);
+   if(output)plot(bordfinal);
+   Thall=buildmesh(bordfinal);
+}
+if(Upout!=1. && Downout!=1. && Rightout==1. && Leftout==1.){
+   Pointonbord(Up);Pointonbord(Down);
+   func bordfinal=GC(NN)+GBUp(Upbord)+GBDown(Downbord);
+   if(output)plot(bordfinal);
+   Thall=buildmesh(bordfinal);
+}
+if(Upout!=1. && Downout==1. && Rightout!=1. && Leftout==1.){
+   Pointonbord(Up);Pointonbord(Right);
+   func bordfinal=GC(NN)+GBUp(Upbord)+GBRight(Rightbord);
+   if(output)plot(bordfinal);
+   Thall=buildmesh(bordfinal);
+}
+if(Upout!=1. && Downout==1. && Rightout==1. && Leftout!=1.){
+   Pointonbord(Up);Pointonbord(Left);
+   func bordfinal=GC(NN)+GBUp(Upbord)+GBLeft(Leftbord);
+   if(output)plot(bordfinal);
+   Thall=buildmesh(bordfinal);
+}
+if(Upout==1. && Downout!=1. && Rightout!=1. && Leftout==1.){
+   Pointonbord(Down);Pointonbord(Right);
+   func bordfinal=GC(NN)+GBDown(Downbord)+GBRight(Rightbord);
+   if(output)plot(bordfinal);
+   Thall=buildmesh(bordfinal);
+}
+if(Upout==1. && Downout!=1. && Rightout==1. && Leftout!=1.){
+   Pointonbord(Down);Pointonbord(Left);
+   func bordfinal=GC(NN)+GBDown(Downbord)+GBLeft(Leftbord);
+   if(output)plot(bordfinal);
+   Thall=buildmesh(bordfinal);
+}
+if(Upout==1. && Downout==1. && Rightout!=1. && Leftout!=1.){
+   Pointonbord(Right);Pointonbord(Left);
+   func bordfinal=GC(NN)+GBRight(Rightbord)+GBLeft(Leftbord);
+   if(output)plot(bordfinal);
+   Thall=buildmesh(bordfinal);
+}
+if(Upout!=1. && Downout!=1. && Rightout!=1. && Leftout==1.){
+   Pointonbord(Up);Pointonbord(Down);Pointonbord(Right);
+   func bordfinal=GC(NN)+GBUp(Upbord)+GBDown(Downbord)+GBRight(Rightbord);
+   if(output)plot(bordfinal);
+   Thall=buildmesh(bordfinal);
+}
+if(Upout!=1. && Downout!=1. && Rightout==1. && Leftout!=1.){
+   Pointonbord(Up);Pointonbord(Down);Pointonbord(Left);
+   func bordfinal=GC(NN)+GBUp(Upbord)+GBDown(Downbord)+GBLeft(Leftbord);
+   if(output)plot(bordfinal);
+   Thall=buildmesh(bordfinal);
+}
+if(Upout!=1. && Downout==1. && Rightout!=1. && Leftout!=1.){
+   Pointonbord(Up);Pointonbord(Right);Pointonbord(Left);
+   func bordfinal=GC(NN)+GBUp(Upbord)+GBRight(Rightbord)+GBLeft(Leftbord);
+   if(output)plot(bordfinal);
+   Thall=buildmesh(bordfinal);
+}
+if(Upout!=1. && Downout!=1. && Rightout!=1. && Leftout!=1.){
+   Pointonbord(Down);Pointonbord(Up);Pointonbord(Left);Pointonbord(Right);
+   func bordfinal=GC(NN)+GBDown(Downbord)+GBLeft(Leftbord)+GBUp(Upbord)+GBRight(Rightbord);
+   if(output)plot(bordfinal);
+   Thall=buildmesh(bordfinal);
+}
+Thall=Thall;
+if(output)plot(Thall);
+if(type=="photo" && filename=="mediterannee.pgm")
+   savemesh(Thall,"../Common_files/Mediterannee_eps_"+epsilon+"_alpha_"+alpha+"_Dx_"+Dx+".msh");
+if(type=="xyz" && filename=="../Common_files/java2006-787.xyz")
+   savemesh(Thall,"../Common_files/Java_eps_"+epsilon+"_alpha_"+alpha+"_Dx_"+Dx+".msh");

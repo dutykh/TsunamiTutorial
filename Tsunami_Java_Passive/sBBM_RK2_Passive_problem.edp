@@ -1,0 +1,54 @@
+/*
+   Propagation of a Tsunami wave near Java island: passive generation .
+   solving the problem
+   
+   to run this script : FreeFem++ sBBM_Java_Passive.edp -ns -v 0
+   
+   Copyright (C) 2020 Georges SADAKA and Denys Dutykh
+
+   This program is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+   
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+   
+   You should have received a copy of the GNU General Public License
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+   --------------------------------------------------------------------------------
+   An additional file to the main file for propagation of a Tsunami wave near Java 
+   island: passive generation
+   --------------------------------------------------------------------------------
+   Author 1: Georges SADAKA, LMRS -- University of Rouen
+   Author 2: Denys Dutykh, CNRS -- LAMA, USMB          
+   E-mail 1: Georges.SADAKA@univ-rouen.fr                  
+   E-mail 2: Denys.Dutykh@univ-smb.fr   
+   Web 1:  http://georges-sadaka.fr/ 
+   Web 2:  http://www.denys-dutykh.com/
+   Blog 2:   http://dutykh.github.io/    
+   GitHub 1: https://github.com/GeorgesSadaka/
+   GitHub 2: https://github.com/dutykh/  
+   -----------------------------------------------------------------------
+   Distributed under GNU General Public License      
+   --------------------------------------------------
+*/
+
+solve fk1([etak1,uk1,vk1],[te,tu,tv]) = int2d(Th)( (etak1 * te + b * D2 * grad(etak1)' * grad(te)) ) + int2d(Th)( dt * F(eta0,u0,v0,te) )
++ int2d(Th)( (uk1 * tu + 2.*d*D*[DX,DY]'*grad(uk1)*tu + d * D2 * grad(uk1)' * grad(tu)) ) + int2d(Th)( dt * G(eta0,u0,v0,tu) )
++ int2d(Th)( (vk1 * tv + 2.*d*D*[DX,DY]'*grad(vk1)*tv + d * D2 * grad(vk1)' * grad(tv)) ) + int2d(Th)( dt * H(eta0,u0,v0,tv) )
++int1d(Th,0,1,3)((-b*ge*D2+A*(gu*(3.*D2*DX+D2*DY)+gv*(D2*DX+3.*D2*DY)))*te)
+//+int1d(Th,1)((-d*D2*gu+B*ge*gr*(3.*D*DX+D*DY))*tu)+int1d(Th,1)((-d*gv*D2+B*gr*ge*(3.*D*DX+D*DY))*tv)
++on(0,1,3,uk1=0.)+on(0,1,3,vk1=0.);
+[eta0pk1,u0pk1,v0pk1]=[eta0+etak1,u0+uk1,v0+vk1];
+solve fk2([etak2,uk2,vk2],[te,tu,tv]) = int2d(Th)( (etak2 * te + b * D2 * grad(etak2)' * grad(te)) ) + int2d(Th)( dt * F(eta0pk1,u0pk1,v0pk1,te) )
++ int2d(Th)( (uk2 * tu + 2.*d*D*[DX,DY]'*grad(uk2)*tu + d * D2 * grad(uk2)' * grad(tu)) ) + int2d(Th)( dt * G(eta0pk1,u0pk1,v0pk1,tu) )
++ int2d(Th)( (vk2 * tv + 2.*d*D*[DX,DY]'*grad(vk2)*tv + d * D2 * grad(vk2)' * grad(tv)) ) + int2d(Th)( dt * H(eta0pk1,u0pk1,v0pk1,tv) )
++int1d(Th,0,1,3)((-b*ge*D2+A*(gu*(3.*D2*DX+D2*DY)+gv*(D2*DX+3.*D2*DY)))*te)
+//+int1d(Th,1)((-d*D2*gu+B*ge*gr*(3.*D*DX+D*DY))*tu)+int1d(Th,1)((-d*gv*D2+B*gr*ge*(3.*D*DX+D*DY))*tv)
++on(0,1,3,uk2=0.)+on(0,1,3,vk2=0.);
+[eta,u1,u2]=[eta0+(etak1+etak2)/2.,u0+(uk1+uk2)/2.,v0+(vk1+vk2)/2.];
+[eta0,u0,v0]=[eta,u1,u2];

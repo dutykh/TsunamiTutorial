@@ -1,0 +1,237 @@
+/*
+   Generation of the bottom displacement of the earthquake near Java island.
+
+   to run this script : FreeFem++ zeta_Java_compute_save.edp -ns -v 0
+   
+   Copyright (C) 2020 Georges SADAKA and Denys Dutykh
+
+   This program is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+   
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+   
+   You should have received a copy of the GNU General Public License
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+   -------------------------------------------------------------------------------------
+   The main file for generate the bottom displacement of the earthquake near Java island
+   -------------------------------------------------------------------------------------
+   Author 1: Georges SADAKA, LMRS -- University of Rouen
+   Author 2: Denys Dutykh, CNRS -- LAMA, USMB          
+   E-mail 1: Georges.SADAKA@univ-rouen.fr                  
+   E-mail 2: Denys.Dutykh@univ-smb.fr   
+   Web 1:  http://georges-sadaka.fr/ 
+   Web 2:  http://www.denys-dutykh.com/
+   Blog 2:   http://dutykh.github.io/    
+   GitHub 1: https://github.com/GeorgesSadaka/
+   GitHub 2: https://github.com/dutykh/  
+   -----------------------------------------------------------------------
+   Distributed under GNU General Public License      
+   --------------------------------------------------
+*/
+
+verbosity=0.;
+bool output=true;
+bool compOkada=true;
+bool compDispOkada=true;
+bool adapt=true;
+if(adapt) include "../Common_files/adapt_GS.edp"
+real[int] colormapHSVjet = [0.6667,1.0000,0.5625,0.6667,1.0000,0.6250,0.6667,1.0000,0.6875,0.6667,1.0000,0.7500,0.6667,1.0000,0.8125,0.6667,1.0000,0.8750,0.6667,1.0000,0.9375,0.6667,1.0000,1.0000,0.6563,1.0000,1.0000,0.6458,1.0000,1.0000,0.6354,1.0000,1.0000,0.6250,1.0000,1.0000,0.6146,1.0000,1.0000,0.6042,1.0000,1.0000,0.5938,1.0000,1.0000,0.5833,1.0000,1.0000,0.5729,1.0000,1.0000,0.5625,1.0000,1.0000,0.5521,1.0000,1.0000,0.5417,1.0000,1.0000,0.5313,1.0000,1.0000,0.5208,1.0000,1.0000,0.5104,1.0000,1.0000,0.5000,1.0000,1.0000,0.4889,0.9375,1.0000,0.4762,0.8750,1.0000,0.4615,0.8125,1.0000,0.4444,0.7500,1.0000,0.4242,0.6875,1.0000,0.4000,0.6250,1.0000,0.3704,0.5625,1.0000,0.3333,0.5000,1.0000,0.2963,0.5625,1.0000,0.2667,0.6250,1.0000,0.2424,0.6875,1.0000,0.2222,0.7500,1.0000,0.2051,0.8125,1.0000,0.1905,0.8750,1.0000,0.1778,0.9375,1.0000,0.1667,1.0000,1.0000,0.1563,1.0000,1.0000,0.1458,1.0000,1.0000,0.1354,1.0000,1.0000,0.1250,1.0000,1.0000,0.1146,1.0000,1.0000,0.1042,1.0000,1.0000,0.0938,1.0000,1.0000,0.0833,1.0000,1.0000,0.0729,1.0000,1.0000,0.0625,1.0000,1.0000,0.0521,1.0000,1.0000,0.0417,1.0000,1.0000,0.0313,1.0000,1.0000,0.0208,1.0000,1.0000,0.0104,1.0000,1.0000, 0,1.0000,1.0000, 0,1.0000,0.9375, 0,1.0000,0.8750, 0,1.0000,0.8125, 0,1.0000,0.7500, 0,1.0000,0.6875, 0,1.0000,0.6250, 0,1.0000,0.5625, 0,1.0000,0.5000];
+string filename="../Common_files/java2006-787.xyz";
+mesh TSh=triangulate(filename);
+real aamin = TSh[0][0].x,bbmax = TSh[TSh.nt-1][0].x,ddmin = TSh[0][0].y,ccmax = TSh[TSh.nt-1][0].y;
+real lon0=.5*(aamin+bbmax);
+real lat0=.5*(ddmin+ccmax);
+real Requator=6378137.,Rpole=6356752.;
+real R=sqrt(((Requator^2*cos(lat0*pi/180.))^2+(Rpole^2*sin(lat0*pi/180.))^2)/((Requator*cos(lat0*pi/180.))^2+(Rpole*sin(lat0*pi/180.))^2));
+real coefl0=pi*R/180.;
+macro grad(u)([dx(u),dy(u)])//
+macro movedegkmX(x0,y0)( (x0-lon0)*cos(y0*pi/180.)*coefl0 ) //
+macro movedegkmY(y0)( (y0-lat0)*coefl0 ) //
+real[int] longP = [109.20508, 106.50434, 106.72382, 109.42455];
+real[int] lattP = [-10.37387, -9.45925, -8.82807, -9.74269];
+real[int] xP(4),yP(4);
+for(int i=0;i<=3;i++){
+   xP[i]=movedegkmX(longP[i],lattP[i]);
+   yP[i]=movedegkmY(lattP[i]);
+}
+int Nxf = 21;        // number of subfaults along strike
+int Nyf = 7;         // number of subfaults down dip
+int Nxyf = Nxf*Nyf;   // total number of fault patches
+real L = sqrt((xP[0]-xP[1])^2+(yP[0]-yP[1])^2)/Nxf;// Subfault length
+real W = sqrt((xP[0]-xP[3])^2+(yP[0]-yP[3])^2)/Nyf;// Subfault width
+border AB (t = longP[0], longP[3]){x = t;y = (lattP[0]-lattP[3])/(longP[0]-longP[3])*x+lattP[0]-(lattP[0]-lattP[3])/(longP[0]-longP[3])*longP[0];label = 0;};
+border BC (t = longP[3], longP[2]){x = t;y = (lattP[3]-lattP[2])/(longP[3]-longP[2])*x+lattP[3]-(lattP[3]-lattP[2])/(longP[3]-longP[2])*longP[3];label = 0;};
+border CD (t = longP[2], longP[1]){x = t;y = (lattP[2]-lattP[1])/(longP[2]-longP[1])*x+lattP[2]-(lattP[2]-lattP[1])/(longP[2]-longP[1])*longP[2];label = 0;};
+border DA (t = longP[1], longP[0]){x = t;y = (lattP[1]-lattP[0])/(longP[1]-longP[0])*x+lattP[1]-(lattP[1]-lattP[0])/(longP[1]-longP[0])*longP[1];label = 0;};
+border ABM (t = xP[0], xP[3]){x = t;y = (yP[0]-yP[3])/(xP[0]-xP[3])*x+yP[0]-(yP[0]-yP[3])/(xP[0]-xP[3])*xP[0];label = 0;};
+border BCM (t = xP[3], xP[2]){x = t;y = (yP[3]-yP[2])/(xP[3]-xP[2])*x+yP[3]-(yP[3]-yP[2])/(xP[3]-xP[2])*xP[3];label = 0;};
+border CDM (t = xP[2], xP[1]){x = t;y = (yP[2]-yP[1])/(xP[2]-xP[1])*x+yP[2]-(yP[2]-yP[1])/(xP[2]-xP[1])*xP[2];label = 0;};
+border DAM (t = xP[1], xP[0]){x = t;y = (yP[1]-yP[0])/(xP[1]-xP[0])*x+yP[1]-(yP[1]-yP[0])/(xP[1]-xP[0])*xP[1];label = 0;};
+func bord=ABM(1)+BCM(1)+CDM(1)+DAM(1);
+mesh ThFault=buildmesh(AB(1)+BC(1)+CD(1)+DA(1));
+real xO1=(longP[3]+longP[1])/2.,yO1=(lattP[2]+lattP[0])/2.;
+real alphaRot = -atan((lattP[3]-lattP[2])/(longP[3]-longP[2]));
+real[int] ROTM=[(longP[1]-xO1)*cos(alphaRot)-(lattP[1]-yO1)*sin(alphaRot)+xO1,
+            (longP[3]-xO1)*cos(alphaRot)-(lattP[3]-yO1)*sin(alphaRot)+xO1,
+            (longP[0]-xO1)*sin(alphaRot)+(lattP[0]-yO1)*cos(alphaRot)+yO1,
+            (longP[2]-xO1)*sin(alphaRot)+(lattP[2]-yO1)*cos(alphaRot)+yO1];
+real epsRot=1.;
+mesh ThFaultTrans=square(1,1,[x*(ROTM[1]-ROTM[0]+2.*epsRot)+ROTM[0]-epsRot,y*(ROTM[3]-ROTM[2]+2.*epsRot)+ROTM[2]-epsRot]);
+alphaRot=-alphaRot;
+ThFaultTrans=movemesh(ThFaultTrans,[(x-xO1)*cos(alphaRot)-(y-yO1)*sin(alphaRot)+xO1,(x-xO1)*sin(alphaRot)+(y-yO1)*cos(alphaRot)+yO1]);
+fespace VhFaultTrans(ThFaultTrans,P1);
+VhFaultTrans uFaultTrans=1.;
+if(output) plot(ThFault,ThFaultTrans);
+// ======================================
+// Reading fault patches
+// #Lat. Lon. depth Slip Rake strike dip
+// ======================================
+string datafault="../Common_files/ffault_ext.txt";   
+real[int] lattF(Nxyf), longF(Nxyf), depth(Nxyf), Slip(Nxyf), Rake(Nxyf);
+real delta, phi;
+{ ifstream file(datafault); 
+   for(int i=0;i<Nxyf;i++)
+   file >> lattF(i) >> longF(i) >> depth(i) >> Slip(i) >> Rake(i) >> phi >> delta ; 
+}
+delta *= pi/180.0;  // dip angle
+phi = -(phi - 90.0)*pi/180.0;   // strike angle
+depth *= 1e3; // converted to meters
+Slip *= 1e-2; // converted to meters
+Rake *= pi/180.0;
+// convert to m
+real[int] xF(Nxyf), yF(Nxyf), IdN(Nxyf);
+for(int i=0;i<Nxyf;i++){
+   xF[i]=movedegkmX(longF[i],lattF[i]);
+   yF[i]=movedegkmY(lattF[i]);
+}
+real vp = 6000.;// P-wave velocity
+real vs = 3400.;// S-wave velocity
+real rho = 2700.;// crust density
+real mu = vs^2*rho,lambda = (vp^2*rho - 2*mu);// Lame coefficients
+real lattc = -9.295, longc = 107.345;// Epicenter location
+real yc = movedegkmY(lattc);
+real xc = movedegkmX(longc,lattc);
+real vr = 1.1e3;// Rupture velocity in m/s
+// compute subfault initiation times
+real[int] Ti(Nxyf);
+for(int j=0;j<Nxyf;j++)
+   Ti(j) = sqrt( (xc-xF(j))^2 + (yc-yF(j))^2 + (0.0 - 0.0*depth(j))^2 )/vr;
+real tr = 8.0;// Rise time in seconds
+real alpha = log(3.)/(2.0/3.0*tr);
+real Tf = 270.0; // final time of simulation
+real t = 0.0;   // current time
+real dt = 2.0;   // time increment
+real N = Tf/dt;
+macro heaviside(t)(0.*(t<0) + .5*(t==0) + 1.*(t>0))//
+real eps=1.e-16;
+mesh Thinit=readmesh("../Common_files/Java_eps_0.01_alpha_100_Dx_0.03.msh");
+mesh Th=Thinit;
+fespace Vh(Th,P1);
+Vh upRotRectFault;
+matrix BVinterp=interpolate(Vh,VhFaultTrans,inside=true);
+upRotRectFault[]=BVinterp*uFaultTrans[];
+real erradapt=1.e-7;
+mesh ThRec=trunc(Th,upRotRectFault>=erradapt,label=0);
+if(output) plot(ThRec);
+ThRec=movemesh(ThRec,[(x-lon0)*cos(y*pi/180.)*coefl0,(y-lat0)*coefl0]);
+ThFault=movemesh(ThFault,[(x-lon0)*cos(y*pi/180.)*coefl0,(y-lat0)*coefl0]);
+mesh ThRecinit=ThRec;
+fespace Wh(ThRec,P1);
+fespace Whinit(ThRecinit,P1);
+real[int,int] OkadaSolW(Nxyf,Whinit.ndof);
+real[int,int] DispOkadaSol(N+1,Whinit.ndof);
+Whinit w0, PlotOKADASOL, PlotDispOKADASOL, OKADASOLW, OkaSolW;
+Wh Disp;
+// to compute OkadaSolW
+if(compOkada) {
+   { ofstream f("OkadaSolJava_adapt.txt");
+      for (int j=0;j<Nxyf;j++){
+         real x0 = xF(j), y0 = yF(j), d = depth(j), slip = Slip(j), rake = Rake(j);
+         if(adapt) ThRec=trunc(ThRecinit,((x-x0+10.)^2+(y-y0+10.)^2<=(6.*max(L,W))^2)>=erradapt,label=0);
+         include "../Common_files/OkadaSol.edp"
+         if(output) plot(ThRecinit,w,cmm="Okada Solution at j="+j+", min="+w[].min+", max="+w[].max,fill=true,hsv=colormapHSVjet,value=true,wait=0,dim=2);
+         if(adapt) {
+            fespace Whp(ThRec,P1);
+            matrix BWinterp=interpolate(Whp,Whinit,inside=true);
+            BWinterp=BWinterp';
+            w0[]=BWinterp*w[];
+            OkadaSolW(j,:)=w0[](:);
+         } else {
+            OkadaSolW(j,:)=w[](:);
+         }
+         f << OkadaSolW(j,:)<<endl;
+      }
+   }
+} else {
+   // to read OkadaSolW
+   { ifstream file("OkadaSolJava_adapt.txt");
+      for (int j=0;j<Nxyf;j++){
+         file >> PlotOKADASOL[](:);
+         OkadaSolW(j,:)=PlotOKADASOL[](:);
+         if(output) plot(PlotOKADASOL,nbiso=25,value=1.,wait=0.);
+      }
+   }
+}
+if (compDispOkada) {
+   { ofstream ff("DispOkadaSolJava_adapt.txt");
+      if(adapt) ThRec=trunc(ThRecinit,((x-xc+5.)^2+(y-yc+5.)^2<=(4.*max(L,W))^2)>=erradapt,label=0);
+      for (int k=0;k<=N;k++){
+         if(adapt & (!(k%5)) & k>0){
+            real iso=0.05;
+            erradapt=1.e-4;
+            real smooth = 5.e-9;
+            mesh Thp=ThRec;
+            { AdaptGS(Thp,Disp,erradapt,iso,smooth,50.e3,ThRecinit,false,0.); }
+            fespace Whp(Thp,P1);
+            Wh pDisp=Disp;
+            Whp DispP;
+            matrix BWinterp=interpolate(Whp,Wh,inside=true);
+            DispP[]=BWinterp*pDisp[];
+            ThRec=Thp;
+            Disp=DispP;
+         }
+         Disp = 0.;
+         for (int j=0;j<Nxyf;j++){
+            if(heaviside(t-Ti(j))){
+               OkaSolW[]=OkadaSolW(j,:);
+               if(adapt){
+                  fespace Whp(ThRec,P1);
+                  Whp OkaSolWp;
+                  matrix BWinterp=interpolate(Whp,Whinit,inside=true);
+                  OkaSolWp[]=BWinterp*OkaSolW[];
+                  Disp = Disp + heaviside(t-Ti(j))*(1 - exp(-alpha*(t-Ti(j))))*OkaSolWp;
+               } else {
+                  Disp = Disp + heaviside(t-Ti(j))*(1 - exp(-alpha*(t-Ti(j))))*OkaSolW;
+               }
+            }      
+         }
+         if(output) plot(ThRecinit,Disp,cmm="Java bottom displacement at t="+(t)+"s., min="+Disp[].min+", max="+Disp[].max,value=true,hsv=colormapHSVjet,fill=true,wait=0.);
+         t = t + dt;
+         if(adapt) {
+            fespace Whp(ThRec,P1);
+            matrix BWinterp=interpolate(Whp,Whinit,inside=true);
+            BWinterp=BWinterp';
+            w0[]=BWinterp*Disp[];
+            DispOkadaSol(k,:)=w0[](:);
+         } else {
+            DispOkadaSol(k,:)=Disp[](:);
+         }
+         ff << DispOkadaSol(k,:)<<endl;
+      }
+   }
+} else {
+   // to read DispOkadaSolJava
+   { ifstream file("DispOkadaSolJava_adapt.txt");
+      for (int j=0;j<N;j++){
+         file >> PlotDispOKADASOL[](:);
+         DispOkadaSol(j,:)=PlotDispOKADASOL[](:);
+         if(output) plot(PlotDispOKADASOL,nbiso=25,value=1.,wait=0.);
+      }
+   }        
+}

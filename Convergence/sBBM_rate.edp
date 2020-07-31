@@ -1,0 +1,119 @@
+/*
+   Rate of convergence of the sBBM system
+   
+   to run this script : FreeFem++ sBBM_rate.edp -ns -v 0
+
+   Copyright (C) 2020 Georges SADAKA and Denys Dutykh
+
+   This program is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+   
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+   
+   You should have received a copy of the GNU General Public License
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+   -----------------------------------------------------------------------
+   The main file for computing the rate of convergence of the sBBM system
+   -----------------------------------------------------------------------
+   Author 1: Georges SADAKA, LMRS -- University of Rouen
+   Author 2: Denys Dutykh, CNRS -- LAMA, USMB          
+   E-mail 1: Georges.SADAKA@univ-rouen.fr                  
+   E-mail 2: Denys.Dutykh@univ-smb.fr   
+   Web 1:  http://georges-sadaka.fr/ 
+   Web 2:  http://www.denys-dutykh.com/
+   Blog 2:   http://dutykh.github.io/    
+   GitHub 1: https://github.com/GeorgesSadaka/
+   GitHub 2: https://github.com/dutykh/  
+   -----------------------------------------------------------------------
+   Distributed under GNU General Public License      
+   --------------------------------------------------
+*/
+
+verbosity=0;
+real s0=time();
+include "sBBM_RHS.edp"
+int nraff=5;
+real[int] L2errorETA(nraff), L2errorUV(nraff), H1errorETA(nraff), H1errorUV(nraff);
+real[int] Dx(nraff),Dt(nraff),Time(nraff);
+macro grad(u)[dx(u),dy(u)]//
+macro div(u,v)(dx(u)+dy(v))//
+macro F(e,u,v,t)(((D+e) * div(u,v) + ([DX,DY]+grad(e))'*[u,v]+A*(-2.*D*DX*DY*dx(v)+2.D*DX^2*dy(v)))*t-A*((2.*D2*DX*dx(u)+D2*DY*dx(v))*dx(t)+(D2*DY*dx(u)+D2*DX*dy(u)+D2*DX*dx(v)+2.*D2*DY*dy(v))*dy(t)))//
+macro G(e,u,v,t)((gr*(1.-2.*B*DX^2-B*DY^2)*dx(e)+dx(u)*(u)+dx(v)*(v)-gr*B*DX*DY*dy(e))*t-gr*2.*B*D*DX*dx(e)*dx(t)-gr*(B*D*DY*dx(e)+B*D*DX*dy(e))*dy(t))//
+macro H(e,u,v,t)((-gr*(2.*B*DX*DY)*dx(e)+dy(u)*(u)+dy(v)*(v)+gr*(1.-2*B*DY^2)*dy(e))*t-gr*B*D*DY*dx(e)*dx(t)-gr*(B*D*DX*dx(e)+2.*B*D*DY*dy(e))*dy(t))//
+int N,M,kk;
+real theta2=2./3.,theta=sqrt(theta2),mu=(4.-6.*theta2)/(3.*(1.-theta2)), nu=0.;//BBM_BBM
+real a=.5*(theta2-1./3.)*nu, b=.5*(theta2-1./3.)*(1.-nu), c=.5*(1-theta2)*mu, d=.5*(1-theta2)*(1.-mu);
+real A=-.5*((theta-1.)^2-1./3.),B=1.-theta;
+real gr=1.;
+real t,dt,tmdt,T=1.;
+real pi=3.1415926536;
+{ 
+   ofstream outv("rate_sBBM_RK2.txt");
+   outv <<"\\\\ \\hline N & NL2(\eta) & - & NL2(U(u,v)) & - & NH1(\eta) & - & NH1(U(u,v)) & - % & time" <<endl;
+}
+for (int n=0;n<nraff;n++) {
+   s0=time();
+   kk=0;
+   N=2^(n+5);
+   M=N;
+   real L=50.;
+   mesh Th=square(N,M,[x*2.*L,y*2.*L]);
+   real Dx =2.*L/N, Dy = Dx;
+   fespace Vh(Th,[P1,P1,P1],periodic=[[1,x],[3,x],[2,y],[4,y]]);
+   Vh [eta, u1, u2], [eta0,u0,v0]=[ETAex(0.),Uex(0.),Vex(0.)],[etaex, uex, vex],[te,tu,tv];
+   Vh [eta0pk1, u0pk1, v0pk1], [etak1, uk1, vk1], [etak2, uk2, vk2];
+   fespace Bh(Th,P1);
+   Bh D=Dex(0.);
+   Bh D2=D^2,DX=dx(D),DY=dy(D),FOND=-D;
+   dt=.01/(2^n);
+   Dt[n]=dt;
+   cout<<dt<<endl;
+   real setaL2=0.,suvL2=0.,setaH1=0., suvH1=0.;
+   for (t=dt;t<=T;t+=dt) {
+      tmdt=t-dt;
+      setaL2+=dt*int2d(Th)(abs(eta0-ETAex(tmdt))^2);
+      suvL2+=dt*int2d(Th)(abs(u0-Uex(tmdt))^2+abs(v0-Vex(tmdt))^2);
+      setaH1+=dt*int2d(Th)(abs(dx(eta0)-ETAexx(tmdt))^2+abs(dy(eta0)-ETAexy(tmdt))^2);
+      suvH1+=dt*int2d(Th)(abs(dx(u0)-Uexx(tmdt))^2+abs(dx(v0)-Vexx(tmdt))^2+abs(dy(u0)-Uexy(tmdt))^2+abs(dy(v0)-Vexy(tmdt))^2);
+      include "sBBM_RK2_problem.edp"
+      //plot(eta0,FOND,cmm="t= "+t,wait=1.);
+      //plot([u0,v0],cmm="t= "+t,wait=1.,coef=10.);
+      kk++;
+   }
+   L2errorETA[n]=sqrt(setaL2);
+   L2errorUV[n]=sqrt(suvL2);
+   H1errorETA[n]=sqrt(sqrt(setaL2)+setaH1);
+   H1errorUV[n]=sqrt(sqrt(suvL2)+suvH1);
+   Time[n]=time()-s0;
+   if (n==0)
+      cout <<Time[n]<<"s;"<<"N = "<<N<<" ;L2errorETA = "<<  L2errorETA[n] <<" ;L2errorUV = "<<  L2errorUV[n] <<" ;H1errorETA = "<<  H1errorETA[n] <<" ;H1errorUV = "<<  H1errorUV[n] <<endl;
+   else
+      cout <<Time[n]<<"s;"<<"N = "<<N<<" ;L2errorETA = "<<  L2errorETA[n] <<" ;L2errorUV = "<<  L2errorUV[n] <<" ;H1errorETA = "<<  H1errorETA[n]<<" ;H1errorUV = "<<  H1errorUV[n] <<" ;Rate ETA L2= "<< log(L2errorETA[n-1]/L2errorETA[n])/log(Dt[n-1]/Dt[n])<<" ;Rate UV L2= "<< log(L2errorUV[n-1]/L2errorUV[n])/log(Dt[n-1]/Dt[n])<<" ;Rate ETA H1= "<< log(H1errorETA[n-1]/H1errorETA[n])/log(Dt[n-1]/Dt[n])<<" ;Rate UV H1= "<< log(H1errorUV[n-1]/H1errorUV[n])/log(Dt[n-1]/Dt[n])  <<endl;
+
+   { 
+      ofstream outv("rate_sBBM_RK2.txt",append);
+      if (n==0){
+         outv <<"\\\\ \\hline "<< N <<" & "<< L2errorETA[n] <<" & - & "<< L2errorUV[n] <<" & - & "<<  H1errorETA[n] <<" & - & "<<  H1errorUV[n] <<" & -" <<"% & " <<Time[n]<< endl;
+      } else
+         outv <<"\\\\ \\hline "<< N <<" & "<< L2errorETA[n] <<" & " << log(L2errorETA[n-1]/L2errorETA[n])/log(Dt[n-1]/Dt[n]) <<" & "<< L2errorUV[n] <<" & "<< log(L2errorUV[n-1]/L2errorUV[n])/log(Dt[n-1]/Dt[n]) <<" & "<<  H1errorETA[n] <<" & "<< log(H1errorETA[n-1]/H1errorETA[n])/log(Dt[n-1]/Dt[n]) <<" & "<<  H1errorUV[n] <<" & "<< log(H1errorUV[n-1]/H1errorUV[n])/log(Dt[n-1]/Dt[n])<<"% & " <<Time[n]<< endl;
+   }
+}
+ofstream outmatlab("rate_sBBM_RK2_Matlab.txt");
+outmatlab<<"XsBBMRK2=log([";
+for (int n=nraff-1;n>=0;n--){ outmatlab<<Dt[n]; if (n!=0) outmatlab<<",";   } outmatlab<<"]);"<<endl;
+outmatlab<<"YsBBMRK2L2errorETA=log([";
+for (int n=nraff-1;n>=0;n--){ outmatlab<<L2errorETA[n]; if (n!=0) outmatlab<<",";   } outmatlab<<"]);"<<endl;
+outmatlab<<"YsBBMRK2L2errorUV=log([";
+for (int n=nraff-1;n>=0;n--){ outmatlab<<L2errorUV[n]; if (n!=0) outmatlab<<",";   } outmatlab<<"]);"<<endl;
+outmatlab<<"YsBBMRK2H1errorETA=log([";
+for (int n=nraff-1;n>=0;n--){ outmatlab<<H1errorETA[n]; if (n!=0) outmatlab<<",";   } outmatlab<<"]);"<<endl;
+outmatlab<<"YsBBMRK2H1errorUV=log([";
+for (int n=nraff-1;n>=0;n--){ outmatlab<<H1errorUV[n]; if (n!=0) outmatlab<<",";   } outmatlab<<"]);"<<endl;
+outmatlab<<"YsBBMRK2Time=log([";
+for (int n=nraff-1;n>=0;n--){ outmatlab<<Time[n]; if (n!=0) outmatlab<<",";   } outmatlab<<"]);"<<endl;

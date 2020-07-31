@@ -1,0 +1,51 @@
+/*
+   New domain adaptation technic
+   
+   Copyright (C) 2020 Georges SADAKA and Denys Dutykh
+
+   This program is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+   
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+   
+   You should have received a copy of the GNU General Public License
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+   -------------------------------------------------------------
+   An additional file of the several main file in this toolbox
+   -------------------------------------------------------------
+   Author 1: Georges SADAKA, LMRS -- University of Rouen
+   Author 2: Denys Dutykh, CNRS -- LAMA, USMB          
+   E-mail 1: Georges.SADAKA@univ-rouen.fr                  
+   E-mail 2: Denys.Dutykh@univ-smb.fr   
+   Web 1:  http://georges-sadaka.fr/ 
+   Web 2:  http://www.denys-dutykh.com/
+   Blog 2:   http://dutykh.github.io/    
+   GitHub 1: https://github.com/GeorgesSadaka/
+   GitHub 2: https://github.com/dutykh/  
+   -----------------------------------------------------------------------
+   Distributed under GNU General Public License      
+   --------------------------------------------------
+*/
+
+macro AdaptGS(Th,uadapt,erradapt,isoadapt,smoothadapt,epsadapt,Thinit,output,wv)
+   mesh Thold=Th;
+   fespace Vhold(Thold,P1);
+   Vhold uold=uadapt;
+   real[int] bbmM(4);
+   boundingbox(Thold,bbmM);
+   mesh Thnew=trunc(Thinit,(1.*(x <= (bbmM[1]+epsadapt) & x >= (bbmM[0]-epsadapt)) *(y <= (bbmM[3]+epsadapt) & y >= (bbmM[2]-epsadapt)))>erradapt,label=0);
+   fespace Vhnew(Thnew,P1);
+   Vhnew usmadapt,vsmadapt,unew;
+   matrix BSinterp=interpolate(Vhnew,Vhold,inside=true);
+   unew[]=BSinterp*uold[];
+   solve smoother(usmadapt,vsmadapt)=int2d(Thnew)(smoothadapt*usmadapt*vsmadapt+grad(usmadapt)'*grad(vsmadapt))-int2d(Thnew)(smoothadapt*(abs(unew)>=erradapt)*vsmadapt)+on(0,usmadapt=0.);
+   if(output) plot(usmadapt,fill=true,dim=2,value=true,wait=wv,cmm="usmadapt");
+   if(output) {Vhnew unewp=(usmadapt>=isoadapt); plot(unewp,fill=true,dim=2,value=true,wait=wv,cmm="zone to cut");}
+   Th=trunc(Thnew,usmadapt>=isoadapt,label=0);
+//

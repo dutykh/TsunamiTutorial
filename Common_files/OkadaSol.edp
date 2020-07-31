@@ -1,0 +1,108 @@
+/*
+   The Okada solution computation
+
+   you can see also the matlab version of the Okada solution computation on this link :
+   http://www.denys-dutykh.com/downloads
+
+   Copyright (C) 2020 Georges SADAKA and Denys Dutykh
+
+   This program is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+   
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+   
+   You should have received a copy of the GNU General Public License
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+   -------------------------------------------------------------
+   An additional file of the several main file in this toolbox
+   -------------------------------------------------------------
+   Author 1: Georges SADAKA, LMRS -- University of Rouen
+   Author 2: Denys Dutykh, CNRS -- LAMA, USMB          
+   E-mail 1: Georges.SADAKA@univ-rouen.fr                  
+   E-mail 2: Denys.Dutykh@univ-smb.fr   
+   Web 1:  http://georges-sadaka.fr/ 
+   Web 2:  http://www.denys-dutykh.com/
+   Blog 2:   http://dutykh.github.io/    
+   GitHub 1: https://github.com/GeorgesSadaka/
+   GitHub 2: https://github.com/dutykh/  
+   -----------------------------------------------------------------------
+   Distributed under GNU General Public License      
+   --------------------------------------------------
+*/
+
+/*
+ Explanation of arguments :
+   (x, y) : points where we compute displacements
+ (x0, y0) : left bottom corner of the fault surface
+        d : depth of the fault (at the same corner, normally)
+        u : slip on this fault
+    theta : rake
+    delta : dip angle
+      phi : strike angle
+*/
+
+
+macro U1U(xi, eta, Y, d, delta, lambda, mu)( xi*(Y*sin(delta) - d*cos(delta))/((sqrt (xi^2 + eta^2 + (Y*sin(delta) - d*cos(delta))^2))*(sqrt (xi^2 + eta^2 + (Y*sin(delta) - d*cos(delta))^2)+eta)) + atan(xi*eta/((Y*sin(delta) - d*cos(delta))*sqrt (xi^2 + eta^2 + (Y*sin(delta) - d*cos(delta))^2))) + (-mu/(lambda+mu)*xi/((sqrt (xi^2 + eta^2 + (Y*sin(delta) - d*cos(delta))^2) + eta*sin(delta) - (Y*sin(delta) - d*cos(delta))*cos(delta))*cos(delta)) - tan(delta)*(2.*mu/((lambda+mu)*cos(delta)) * atan ((eta*(sqrt (xi^2 + (Y*sin(delta) - d*cos(delta))^2)+(Y*sin(delta) - d*cos(delta))*cos(delta)) + sqrt (xi^2 + (Y*sin(delta) - d*cos(delta))^2)*(sqrt (xi^2 + eta^2 + (Y*sin(delta) - d*cos(delta))^2)+sqrt (xi^2 + (Y*sin(delta) - d*cos(delta))^2))*sin(delta))/(xi*(sqrt (xi^2 + eta^2 + (Y*sin(delta) - d*cos(delta))^2)+sqrt (xi^2 + (Y*sin(delta) - d*cos(delta))^2))*cos(delta)))))*sin(delta))//
+
+macro U2U(xi, eta, Y, d, delta, lambda, mu)( (Y*sin(delta) - d*cos(delta))/(sqrt (xi^2 + eta^2 +(Y*sin(delta) - d*cos(delta))^2)) - sin(delta)*cos(delta)*(mu/(lambda+mu)*((eta*cos(delta) +(Y*sin(delta) - d*cos(delta))*sin(delta))/(cos(delta)*(sqrt (xi^2 + eta^2 +(Y*sin(delta) - d*cos(delta))^2) + eta*sin(delta) -(Y*sin(delta) - d*cos(delta))*cos(delta))) - log(sqrt (xi^2 + eta^2 +(Y*sin(delta) - d*cos(delta))^2) + eta)) + tan(delta)*(mu/((lambda+mu)*cos(delta))*(log(sqrt (xi^2 + eta^2 +(Y*sin(delta) - d*cos(delta))^2)+eta*sin(delta) -(Y*sin(delta) - d*cos(delta))*cos(delta)) - sin(delta)*log(sqrt (xi^2 + eta^2 +(Y*sin(delta) - d*cos(delta))^2)+eta)))))//
+
+macro U1V(xi, eta, Y, d, delta, lambda, mu)( (eta*cos(delta) + (Y*sin(delta) - d*cos(delta))*sin(delta))*(Y*sin(delta) - d*cos(delta))/((sqrt (xi^2 + eta^2 + (Y*sin(delta) - d*cos(delta))^2))*(sqrt (xi^2 + eta^2 + (Y*sin(delta) - d*cos(delta))^2)+eta)) + cos(delta)*(Y*sin(delta) - d*cos(delta))/(sqrt (xi^2 + eta^2 + (Y*sin(delta) - d*cos(delta))^2)+eta) + sin(delta)*(-mu/(lambda+mu)*log(sqrt (xi^2 + eta^2 + (Y*sin(delta) - d*cos(delta))^2)+eta) - (mu/(lambda+mu)*((eta*cos(delta) + (Y*sin(delta) - d*cos(delta))*sin(delta))/(cos(delta)*(sqrt (xi^2 + eta^2 + (Y*sin(delta) - d*cos(delta))^2) + eta*sin(delta) - (Y*sin(delta) - d*cos(delta))*cos(delta))) - log(sqrt (xi^2 + eta^2 + (Y*sin(delta) - d*cos(delta))^2) + eta)) + tan(delta)*(mu/((lambda+mu)*cos(delta))*(log(sqrt (xi^2 + eta^2 + (Y*sin(delta) - d*cos(delta))^2)+eta*sin(delta) - (Y*sin(delta) - d*cos(delta))*cos(delta)) - sin(delta)*log(sqrt (xi^2 + eta^2 + (Y*sin(delta) - d*cos(delta))^2)+eta))))))//
+
+macro U2V(xi, eta, Y, d, delta, lambda, mu)( (eta*cos(delta) + (Y*sin(delta) - d*cos(delta))*sin(delta))*(Y*sin(delta) - d*cos(delta))/((sqrt (xi^2 + eta^2 + (Y*sin(delta) - d*cos(delta))^2))*(sqrt (xi^2 + eta^2 + (Y*sin(delta) - d*cos(delta))^2)+xi)) + cos(delta)*atan(xi*eta/((Y*sin(delta) - d*cos(delta))*(sqrt (xi^2 + eta^2 + (Y*sin(delta) - d*cos(delta))^2)))) - sin(delta)*cos(delta)*(-mu/(lambda+mu)*xi/((sqrt (xi^2 + eta^2 + (Y*sin(delta) - d*cos(delta))^2) + eta*sin(delta) - (Y*sin(delta) - d*cos(delta))*cos(delta))*cos(delta)) - tan(delta)*(2*mu/((lambda+mu)*cos(delta)) * atan ((eta*(sqrt (xi^2 + (Y*sin(delta) - d*cos(delta))^2)+(Y*sin(delta) - d*cos(delta))*cos(delta)) + (sqrt (xi^2 + (Y*sin(delta) - d*cos(delta))^2))*(sqrt (xi^2 + eta^2 + (Y*sin(delta) - d*cos(delta))^2)+sqrt (xi^2 + (Y*sin(delta) - d*cos(delta))^2))*sin(delta))/(xi*(sqrt (xi^2 + eta^2 + (Y*sin(delta) - d*cos(delta))^2)+sqrt (xi^2 + (Y*sin(delta) - d*cos(delta))^2))*cos(delta))))))//
+
+macro U1W(xi, eta, Y, d, delta, lambda, mu)(((eta + eps)*sin(delta) - (Y*sin(delta) - d*cos(delta))*cos(delta))*(Y*sin(delta) - d*cos(delta))/((sqrt (xi^2 + (eta + eps)^2 + (Y*sin(delta) - d*cos(delta))^2))*(sqrt (xi^2 + (eta + eps)^2 + (Y*sin(delta) - d*cos(delta))^2)+eta + eps)) + (Y*sin(delta) - d*cos(delta))*sin(delta)/(sqrt (xi^2 + (eta + eps)^2 + (Y*sin(delta) - d*cos(delta))^2)+eta + eps) + (mu/((lambda+mu)*cos(delta))*(log(sqrt (xi^2 + (eta + eps)^2 + (Y*sin(delta) - d*cos(delta))^2)+(eta + eps)*sin(delta) - (Y*sin(delta) - d*cos(delta))*cos(delta)) - sin(delta)*log(sqrt (xi^2 + (eta + eps)^2 + (Y*sin(delta) - d*cos(delta))^2)+eta + eps)))*sin(delta))//
+
+macro U2W(xi, eta, Y, d, delta, lambda, mu)((eta*sin(delta) - (Y*sin(delta) - d*cos(delta))*cos(delta))*(Y*sin(delta) - d*cos(delta))/((sqrt ((sqrt (xi^2 + (Y*sin(delta) - d*cos(delta))^2))^2 + eta^2))*(sqrt ((sqrt (xi^2 + (Y*sin(delta) - d*cos(delta))^2))^2 + eta^2)+xi)) + sin(delta)*atan(xi*eta/((Y*sin(delta) - d*cos(delta))*(sqrt ((sqrt (xi^2 + (Y*sin(delta) - d*cos(delta))^2))^2 + eta^2)))) - (2*mu/((lambda+mu)*cos(delta)) * atan ((eta*(sqrt (xi^2 + (Y*sin(delta) - d*cos(delta))^2)+(Y*sin(delta) - d*cos(delta))*cos(delta)) + (sqrt (xi^2 + (Y*sin(delta) - d*cos(delta))^2))*(sqrt ((sqrt (xi^2 + (Y*sin(delta) - d*cos(delta))^2))^2 + eta^2)+sqrt (xi^2 + (Y*sin(delta) - d*cos(delta))^2))*sin(delta))/(xi*(sqrt ((sqrt (xi^2 + (Y*sin(delta) - d*cos(delta))^2))^2 + eta^2)+sqrt (xi^2 + (Y*sin(delta) - d*cos(delta))^2))*cos(delta))))*sin(delta)*cos(delta) )//
+
+real U=slip,theta=rake;
+
+Wh X1 = (x - x0)*cos(phi) + (y - y0)*sin(phi);
+Wh Y1 = -(x - x0)*sin(phi) + (y - y0)*cos(phi);
+Wh p1 = Y1*cos(delta) + d*sin(delta);
+
+Wh u, v, w, X1mL=X1-L,p1mW=p1-W;
+
+u = -U*(cos(theta)*
+    (U1U (X1,p1,Y1,d,delta,lambda,mu) +
+    U1U (X1mL,p1mW,Y1,d,delta,lambda,mu) -
+    U1U (X1,p1mW,Y1,d,delta,lambda,mu) -
+    U1U (X1mL,p1,Y1,d,delta,lambda,mu)) +
+    sin(theta)*
+    (U2U (X1,p1,Y1,d,delta,lambda,mu) +
+    U2U (X1mL,p1mW,Y1,d,delta,lambda,mu) -
+    U2U (X1,p1mW,Y1,d,delta,lambda,mu) -
+    U2U (X1mL,p1,Y1,d,delta,lambda,mu)))/(2*pi);
+
+v = -U*(cos(theta)*
+    (U1V (X1,p1,Y1,d,delta,lambda,mu) +
+    U1V (X1mL,p1mW,Y1,d,delta,lambda,mu) -
+    U1V (X1,p1mW,Y1,d,delta,lambda,mu) -
+    U1V (X1mL,p1,Y1,d,delta,lambda,mu)) +
+    sin(theta)*
+    (U2V (X1,p1,Y1,d,delta,lambda,mu) +
+    U2V (X1mL,p1mW,Y1,d,delta,lambda,mu) -
+    U2V (X1,p1mW,Y1,d,delta,lambda,mu) -
+    U2V (X1mL,p1,Y1,d,delta,lambda,mu)))/(2*pi);
+/*
+w = -U*(cos(theta)*
+    (U1W (X1,p1,Y1,d,delta,lambda,mu) +
+    U1W (X1mL,p1mW,Y1,d,delta,lambda,mu) -
+    U1W (X1,p1mW,Y1,d,delta,lambda,mu) -
+    U1W (X1mL,p1,Y1,d,delta,lambda,mu)) +
+    sin(theta)*
+    (U2W (X1,p1,Y1,d,delta,lambda,mu) +
+    U2W (X1mL,p1mW,Y1,d,delta,lambda,mu) -
+    U2W (X1,p1mW,Y1,d,delta,lambda,mu) -
+    U2W (X1mL,p1,Y1,d,delta,lambda,mu)))/(2*pi);
+*/
+w = -U*sin(theta)*
+    (U2W (X1,p1,Y1,d,delta,lambda,mu) +
+    U2W (X1mL,p1mW,Y1,d,delta,lambda,mu) -
+    U2W (X1,p1mW,Y1,d,delta,lambda,mu) -
+    U2W (X1mL,p1,Y1,d,delta,lambda,mu))/(2*pi);
