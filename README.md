@@ -1,4 +1,7 @@
+![Radiation diagram][GraphicalAbstractSmall.png]
+
 # TsunamiTutorial
+
 Companion repository to our paper submitted to [Geosciences](https://www.mdpi.com/journal/geosciences):
 
 **Title**: *Adaptive numerical modelling of tsunami wave generation and propagation with FreeFem++*
