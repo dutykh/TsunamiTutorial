@@ -14,4 +14,8 @@ Companion repository to our paper submitted to [Geosciences](https://www.mdpi.co
 
 ## How to install FreeFem++?
 
-[Please, see here](https://doc.freefem.org/introduction/installation.html)
+Please, see [here](https://doc.freefem.org/introduction/installation.html) the latest installation instructions for various platforms.
+
+## Disclaimer
+
+This code was tested with **FreeFem++-4.1**.
