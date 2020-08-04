@@ -1,4 +1,4 @@
-![Radiation diagram][https://github.com/dutykh/TsunamiTutorial/blob/master/GraphicalAbstractSmall.png]
+![Radiation diagram](https://github.com/dutykh/TsunamiTutorial/blob/master/GraphicalAbstractSmall.png)
 
 # TsunamiTutorial
 
