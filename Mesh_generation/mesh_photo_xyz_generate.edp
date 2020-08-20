@@ -40,7 +40,7 @@
 real epsilon;// the more epsilon is close to zero, the more u takes values equal to 1 and -1
 real alpha;// alpha set the balance between length of the curve and fitting the actual interface: the more alpha is big the closest is the better is the approximation
 real Dx;// mesh step space size
-string type="photo";// photo or xyz
+string type="xyz";// photo or xyz
 bool meshinside;// choose the region you want to mesh
 bool resizenc=false;// to creat mesh around special zone
 bool output=true;// to plot

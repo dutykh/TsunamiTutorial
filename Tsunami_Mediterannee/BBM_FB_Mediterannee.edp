@@ -1,0 +1,235 @@
+/*
+   Propagation of a Tsunami wave in the Mediterranean sea with a flat bottom.
+   
+   to run this script : FreeFem++ BBM_FB_code_Mediterannee.edp -ns -v 0
+   
+   WARNING : don't forget to generate the mesh from the folder "mesh_generation"
+   that you wan't to use in this script
+   
+   Copyright (C) 2020 Georges SADAKA and Denys Dutykh
+
+   This program is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+   
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+   
+   You should have received a copy of the GNU General Public License
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+   --------------------------------------------------------------------------------------------
+   The main file for propagation of a Tsunami wave in the Mediterranean sea with a flat bottom.
+   --------------------------------------------------------------------------------------------
+   Author 1: Georges SADAKA, LMRS -- University of Rouen
+   Author 2: Denys Dutykh, CNRS -- LAMA, USMB          
+   E-mail 1: Georges.SADAKA@univ-rouen.fr                  
+   E-mail 2: Denys.Dutykh@univ-smb.fr   
+   Web 1:  http://georges-sadaka.fr/ 
+   Web 2:  http://www.denys-dutykh.com/
+   Blog 2:   http://dutykh.github.io/    
+   GitHub 1: https://github.com/GeorgesSadaka/
+   GitHub 2: https://github.com/dutykh/  
+   -----------------------------------------------------------------------
+   Distributed under GNU General Public License      
+   --------------------------------------------------
+*/
+
+macro TsuMedit true//
+
+verbosity=0;
+load "shell"
+load "medit"
+load "iovtk"
+load "isoline"
+load "bfstream"
+real s0=clock(),s0adapt;
+bool output=true;
+bool outputadapt=false; // output inside adaptGS
+bool adapt=true;
+bool save=true;
+include "../Common_files/Common_Macros.idp"
+
+string method="Adapt_GS"; // Adapt_GS or Adapt_FF or Full
+int Nrestart=1, Nsave=50, Nplot=10, IFrestart=0, iter=IFrestart, filenameRST=0, Ncontd=10, itsave;
+bool Paraview=true;// for saving for Paraview
+bool Medit=true;// for saving for Tecplot
+bool Gnu=true;// for saving for gnuplot
+
+real isoadapt=0.05;
+real powerradapt=2.;
+real erradapt=10^(-powerradapt);
+real smoothadapt = .005;
+real epsadapt=50.;
+if(adapt & method=="Adapt_GS"){
+   erradapt=1.e-7;
+   cout<<"Mesh adaptation parameters :"<<endl;
+   cout<<"isoadapt="<<isoadapt<<", erradapt="<<erradapt<<", smoothadapt="<<smoothadapt<<endl;
+}
+
+string meshinit="../Common_files/Mediterannee_eps_1_alpha_1_Dx_1.5.msh";
+string fcase="Tsu_Medit_"+method;
+if(method=="Adapt_FF") fcase = fcase+"_erradapt_10_-"+powerradapt;
+if(method=="Full") adapt=false;
+if(!adapt) fcase="Tsu_Medit_Full";
+string dircase = "OUTPUT_"+fcase+"/";
+createDIR(dircase);
+
+if(adapt & method=="Adapt_GS") include "../Common_files/adapt_GS.edp"
+int op=0;
+real theta2=2./3.,mu=(4.-6.*theta2)/(3.*(1.-theta2)), nu=0.;//BBM_BBM
+real a=.5*(theta2-1./3.)*nu, b=.5*(theta2-1./3.)*(1.-nu), c=.5*(1-theta2)*mu, d=.5*(1-theta2)*(1.-mu);
+real t,dt=.1,T=1000.;
+
+macro F(e,u,v,t)(-((h+e) * div(u,v) + ([hx,hy]+grad(e))'*[u,v])*t)//
+macro G(e,u,v,t)(-(dx(e) + dx(u)*(u) + dx(v)*(v))*t)//
+macro H(e,u,v,t)(-(dy(u)*(u) + dy(v)*(v) + dy(e))*t)//
+
+real L = 20.;
+real W = 10.;
+real eps=1.e-16;
+real scale=1.21767;
+real x0 = 2390.*scale;//2410.*scale;
+real y0 = 590.*scale;//610.*scale;
+int waitv=0;// wait in the plot
+
+cout<< "=============================================================================================" <<endl;
+cout<< "WARNING don't forget to generate the mesh from ../Mesh_generation/mesh_photo_xyz_generate.edp" <<endl;
+cout<< "or add your own mesh" <<endl;
+cout<< "=============================================================================================" <<endl;
+mesh Thinit=readmesh(meshinit);Thinit=movemesh(Thinit,[x*scale,y*scale]);
+mesh Th=Thinit;
+real aa=x0-5.*W,bb=x0+4.*W,cc=y0-1.5*L,dd=y0+2.5*L;
+if(adapt & method=="Adapt_GS" & (IFrestart==0)) Th=trunc(Thinit,(1.*(x <= bb & x >= aa) *(y <= dd & y >= cc))>erradapt,label=0);
+
+fespace Vhinit(Thinit,P0);
+Vhinit hT=hTriangle;
+real Dx=(hT[].min+hT[].max)/2.;
+
+fespace Wh(Th,P1);
+Wh winit,w;
+fespace Vh(Th,[P1,P1,P1]);
+Vh [eta,u,v], [etaex, uex, vex],[te,tu,tv];
+Vh [etapk1, upk1, vpk1], [etak1, uk1, vk1], [etak2, uk2, vk2];
+Wh MAX=0.;
+
+if(IFrestart==0){
+   {
+      real delta = 7.0*pi/180.0;
+      real phi = -(0.0 - 90.0)*pi/180.0;
+      real rake = 90.0*pi/180.0;
+      real d = 10. + W*sin(delta);
+      real slip = 2.5;
+      real E=9.5e9;//Young
+      real nu=0.27;//Poisson
+      real mu = E/(2.*(1.+nu));
+      real lambda = E*nu/((1.+nu)*(1.-2.*nu));
+      include "../Common_files/OkadaSol.edp"
+      w=w/1.e3;
+      for (int i=0;i<w.n;i++){
+         if (abs(w[](i))>=5.e-5)
+            w[](i)=w[](i);
+         else
+            w[](i)=0.;
+      }
+      winit=w;
+   }
+   w=winit;
+   if (output) plot(w,fill=true,dim=2,value=true,wait=waitv,cmm="Inital data for eta");
+   [eta,u,v]=[w,0.,0.];
+} else {
+   cout<<"************** Restart file :: "<<DIRRST+"RST-"+funciterdigits(iter,8)+".rst"<<endl;
+   ReadRST(DIRRST,[eta,u,v],MAX,Th,iter,t,itsave);
+}
+
+real gauge1x=2350.*scale,gauge1y=550.*scale;
+real gauge2x=2104.*scale,gauge2y=665.*scale;
+real gauge1,gauge2,INV0;
+
+{
+   ofstream mat(dircaseGnuplot+"Gauge_"+fcase+".m");
+   mat<<"#Time_gauge1_gauge2_cputime_adapttime_Nt_Ndof_INV0"<<endl;
+}
+
+func ge=0.;   func gu=0.;   func gv=0.;
+func bottom=1.5;
+Wh h=bottom,h2=h^2,hx,hy,hhx,hhy;
+
+// Boundary conditions
+int[int] lab=[0,labels(Thinit)];
+macro BCk1
+   - int1d(Th,lab)(b*ge*h2*te) + on(lab,uk1=0.,vk1=0.)
+   /*- int1d(Th,lab)(d*gu*h2*tu) -int1d(Th,lab)(d*gv*h2*tv) */
+//
+macro BCk2
+   - int1d(Th,lab)(b*ge*h2*te) + on(lab,uk2=0.,vk2=0.)
+   /*- int1d(Th,lab)(d*gu*h2*tu) -int1d(Th,lab)(d*gv*h2*tv) */
+//
+
+while(t<=T && STOP) {
+   if ( ( !(iter % 50) ) & adapt & (iter>IFrestart | iter==0)){
+      s0adapt = clock();
+      Wh uadapt=eta+u+v;
+      if(outputadapt && !(iter % Nplot)){
+         plot(uadapt,fill=true,dim=2,value=true,wait=waitv,cmm="uadapt"+uadapt[].max+"min"+uadapt[].min);
+         Wh Peta=(abs(uadapt)>erradapt);
+         plot(Peta,fill=true,dim=2,value=true,wait=waitv,cmm="Peta");
+      }
+      if(method=="Adapt_GS"){
+         mesh Thp=Th;
+         { AdaptGS(Thp,uadapt,erradapt,isoadapt,smoothadapt,epsadapt,Thinit,outputadapt,waitv); }
+         fespace Whp(Thp,P1);
+         Wh peta=eta,pu=u,pv=v;
+         Whp MAXp,etap,up,vp;
+         matrix BWinterp=interpolate(Wh,Whp,inside=true);
+         BWinterp=BWinterp';
+         etap[]=BWinterp*peta[];
+         up[]=BWinterp*pu[];
+         vp[]=BWinterp*pv[];
+         MAXp[]=BWinterp*MAX[];
+         Th=Thp;
+         [eta,u,v]=[etap,up,vp];
+         MAX=MAXp;
+      }
+      if(method=="Adapt_FF"){
+         Th=adaptmesh(Th,uadapt,err=erradapt,errg=1.e-2,hmin=Dx,iso=true,nbvx=1e8);
+         [eta,u,v]=[eta,u,v];
+         MAX=MAX;
+      }
+      h=bottom; h2 = h^2;hx = dx(h);hy = dy(h); hhx=h*hx; hhy=h*hy;
+      s0adapt = clock()-s0adapt;
+      op=0;
+   }
+   gauge1=eta(gauge1x,gauge1y);
+   gauge2=eta(gauge2x,gauge2y);
+   INV0=int2d(Th)(eta);
+/* Save main physical and numerical results in 1D files (Gnuplot) */
+   {
+      ofstream mat(dircaseGnuplot+"Gauge_"+fcase+".m",append);
+      mat<<t<<" "<<gauge1<<" "<<gauge2<<" "<<clock()-s0<<" "<<s0adapt<<" "<<Th.nt<<" "<<Wh.ndof<<" "<<INV0<<endl;
+   }
+   if(!(iter % 10)) cout<<"time = "<<t<<", gauge1 = "<<gauge1<<", gauge2 = "<<gauge2<<", cputime = "<<clock()-s0<<", cpuadatp = "<<s0adapt<<", Th.nt = "<<Th.nt<<", ndof = "<<Wh.ndof<<", INV0 = "<<INV0<<endl;
+/* Save output files containing the velocity and elevation fields */
+   if(!(iter % Nsave) && save){
+      MAX=max(MAX,eta);
+      savemesh(Th,dircaseMedit+fcase+"_BBM_MAX.1"+funciterdigits(itsave,8)+".mesh");
+      savesol(dircaseMedit+fcase+"_BBM_MAX.1"+funciterdigits(itsave,8)+".sol",Th,MAX);
+      savemesh(Th,dircaseMedit+fcase+"_BBM_SOL.1"+funciterdigits(itsave,8)+".mesh");
+      savesol(dircaseMedit+fcase+"_BBM_SOL.1"+funciterdigits(itsave,8)+".sol",Th,eta);
+      itsave++;
+   }
+/* Save a restart */
+   if(!(iter%Nrestart) && save)
+      SaveRST(dircaseRST,[eta,u,v],MAX,Th,iter,t,itsave);
+/* Plot the solution within FreeFem window */
+   if(output && !(iter % Nplot)) plot(eta,fill=true,value=true,dim=2,wait=waitv,cmm="eta, t= "+t);
+   solveproblem
+   iter++;t+=dt;
+/* Check for a clean stop */
+   if(!(iter%Ncontd)) cleanstop(dircase);
+   op=1;
+}
+cout << " CPU time = " << clock()-s0 << endl;

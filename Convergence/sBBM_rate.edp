@@ -36,20 +36,26 @@
 */
 
 verbosity=0;
-real s0=time();
+real s0=clock();
 include "sBBM_RHS.edp"
+include "../Common_files/Common_Macros.idp"
+bool output=true;
 int nraff=5;
 real[int] L2errorETA(nraff), L2errorUV(nraff), H1errorETA(nraff), H1errorUV(nraff);
 real[int] Dx(nraff),Dt(nraff),Time(nraff);
-macro grad(u)[dx(u),dy(u)]//
-macro div(u,v)(dx(u)+dy(v))//
-macro F(e,u,v,t)(((D+e) * div(u,v) + ([DX,DY]+grad(e))'*[u,v]+A*(-2.*D*DX*DY*dx(v)+2.D*DX^2*dy(v)))*t-A*((2.*D2*DX*dx(u)+D2*DY*dx(v))*dx(t)+(D2*DY*dx(u)+D2*DX*dy(u)+D2*DX*dx(v)+2.*D2*DY*dy(v))*dy(t)))//
-macro G(e,u,v,t)((gr*(1.-2.*B*DX^2-B*DY^2)*dx(e)+dx(u)*(u)+dx(v)*(v)-gr*B*DX*DY*dy(e))*t-gr*2.*B*D*DX*dx(e)*dx(t)-gr*(B*D*DY*dx(e)+B*D*DX*dy(e))*dy(t))//
-macro H(e,u,v,t)((-gr*(2.*B*DX*DY)*dx(e)+dy(u)*(u)+dy(v)*(v)+gr*(1.-2*B*DY^2)*dy(e))*t-gr*B*D*DY*dx(e)*dx(t)-gr*(B*D*DX*dx(e)+2.*B*D*DY*dy(e))*dy(t))//
-int N,M,kk;
+
+macro F(e,u,v,t)(-((h+e) * div(u,v) + ([hx,hy]+grad(e))'*[u,v] + A*(-2.*hhxhy*dx(v) + 2.*hhx2*dy(v)))*t
+               + A*((2.*h2hx*dx(u) + h2hy*dx(v))*dx(t) + (h2hy*dx(u) + h2hx*dy(u) + h2hx*dx(v) + 2.*h2hy*dy(v))*dy(t)) )//
+macro G(e,u,v,t)(-(gr*(1.-2.*B*hx2-B*hy2)*dx(e)+dx(u)*(u)+dx(v)*(v)-gr*B*hxhy*dy(e))*t
+               + gr*2.*B*hhx*dx(e)*dx(t) + gr*(B*hhy*dx(e)+B*hhx*dy(e))*dy(t))//
+macro H(e,u,v,t)(-(-gr*(2.*B*hxhy)*dx(e) + dy(u)*(u) + dy(v)*(v) + gr*(1.-2*B*hy2)*dy(e))*t
+               + gr*B*hhy*dx(e)*dx(t) + gr*(B*hhx*dx(e)+2.*B*hhy*dy(e))*dy(t) )//
+
+int Npx,Npy,iter;
 real theta2=2./3.,theta=sqrt(theta2),mu=(4.-6.*theta2)/(3.*(1.-theta2)), nu=0.;//BBM_BBM
 real a=.5*(theta2-1./3.)*nu, b=.5*(theta2-1./3.)*(1.-nu), c=.5*(1-theta2)*mu, d=.5*(1-theta2)*(1.-mu);
 real A=-.5*((theta-1.)^2-1./3.),B=1.-theta;
+int op;
 real gr=1.;
 real t,dt,tmdt,T=1.;
 real pi=3.1415926536;
@@ -57,51 +63,61 @@ real pi=3.1415926536;
    ofstream outv("rate_sBBM_RK2.txt");
    outv <<"\\\\ \\hline N & NL2(\eta) & - & NL2(U(u,v)) & - & NH1(\eta) & - & NH1(U(u,v)) & - % & time" <<endl;
 }
+macro BCk1
+   - int2d(Th)( dt * (feta(tmdt,te) + fu(tmdt,tu) + fv(tmdt,tv)) )
+//
+macro BCk2
+   - int2d(Th)( dt * (feta(t,te) + fu(t,tu) + fv(t,tv)) )
+//
 for (int n=0;n<nraff;n++) {
-   s0=time();
-   kk=0;
-   N=2^(n+5);
-   M=N;
+   s0=clock();
+   iter=0; op=0;
+   Npx=2^(n+5);
+   Npy=Npx;
    real L=50.;
-   mesh Th=square(N,M,[x*2.*L,y*2.*L]);
-   real Dx =2.*L/N, Dy = Dx;
+   mesh Th=square(Npx,Npy,[x*2.*L,y*2.*L]);
+   real Dx = 2.*L/Npx, Dy = 2.*L/Npy;
    fespace Vh(Th,[P1,P1,P1],periodic=[[1,x],[3,x],[2,y],[4,y]]);
-   Vh [eta, u1, u2], [eta0,u0,v0]=[ETAex(0.),Uex(0.),Vex(0.)],[etaex, uex, vex],[te,tu,tv];
-   Vh [eta0pk1, u0pk1, v0pk1], [etak1, uk1, vk1], [etak2, uk2, vk2];
-   fespace Bh(Th,P1);
-   Bh D=Dex(0.);
-   Bh D2=D^2,DX=dx(D),DY=dy(D),FOND=-D;
+   Vh [eta,u,v]=[ETAex(0.),Uex(0.),Vex(0.)],[etaex, uex, vex],[te,tu,tv];
+   Vh [etapk1, upk1, vpk1], [etak1, uk1, vk1], [etak2, uk2, vk2];
+   fespace Wh(Th,P1);
+   Wh h=hex(0.),h2=h^2,hx=dx(h),hy=dy(h),FOND=-h;
+   Wh hhxhy,hhx2,h2hx,h2hy,hx2,hy2,hhx,hhy,hxhy;
+   hhx=h*hx; hhy=h*hy; hxhy=hx*hy; hhxhy=hhx*hy; hx2=hx^2; hhx2=h*hx2; hy2=hy^2; h2hx=h2*hx; h2hy=h2*hy;
    dt=.01/(2^n);
    Dt[n]=dt;
    cout<<dt<<endl;
    real setaL2=0.,suvL2=0.,setaH1=0., suvH1=0.;
    for (t=dt;t<=T;t+=dt) {
       tmdt=t-dt;
-      setaL2+=dt*int2d(Th)(abs(eta0-ETAex(tmdt))^2);
-      suvL2+=dt*int2d(Th)(abs(u0-Uex(tmdt))^2+abs(v0-Vex(tmdt))^2);
-      setaH1+=dt*int2d(Th)(abs(dx(eta0)-ETAexx(tmdt))^2+abs(dy(eta0)-ETAexy(tmdt))^2);
-      suvH1+=dt*int2d(Th)(abs(dx(u0)-Uexx(tmdt))^2+abs(dx(v0)-Vexx(tmdt))^2+abs(dy(u0)-Uexy(tmdt))^2+abs(dy(v0)-Vexy(tmdt))^2);
-      include "sBBM_RK2_problem.edp"
-      //plot(eta0,FOND,cmm="t= "+t,wait=1.);
-      //plot([u0,v0],cmm="t= "+t,wait=1.,coef=10.);
-      kk++;
+      setaL2+=dt*int2d(Th)(abs(eta-ETAex(tmdt))^2);
+      suvL2+=dt*int2d(Th)(abs(u-Uex(tmdt))^2+abs(v-Vex(tmdt))^2);
+      setaH1+=dt*int2d(Th)(abs(dx(eta)-ETAexx(tmdt))^2+abs(dy(eta)-ETAexy(tmdt))^2);
+      suvH1+=dt*int2d(Th)(abs(dx(u)-Uexx(tmdt))^2+abs(dx(v)-Vexx(tmdt))^2+abs(dy(u)-Uexy(tmdt))^2+abs(dy(v)-Vexy(tmdt))^2);
+      solveproblem
+      if(!(iter%floor(T/dt/10))) cout<<"t = "<<t<<endl;
+      if(output && !(iter%floor(T/dt/10))){
+         plot(eta,FOND,cmm="t= "+t,wait=0.);
+         plot([u,v],cmm="t= "+t,wait=0.,coef=10.);
+      }
+      iter++; op=1;
    }
    L2errorETA[n]=sqrt(setaL2);
    L2errorUV[n]=sqrt(suvL2);
    H1errorETA[n]=sqrt(sqrt(setaL2)+setaH1);
    H1errorUV[n]=sqrt(sqrt(suvL2)+suvH1);
-   Time[n]=time()-s0;
+   Time[n]=clock()-s0;
    if (n==0)
-      cout <<Time[n]<<"s;"<<"N = "<<N<<" ;L2errorETA = "<<  L2errorETA[n] <<" ;L2errorUV = "<<  L2errorUV[n] <<" ;H1errorETA = "<<  H1errorETA[n] <<" ;H1errorUV = "<<  H1errorUV[n] <<endl;
+      cout <<Time[n]<<"s;"<<"Np = "<<Npx<<" ;L2errorETA = "<<  L2errorETA[n] <<" ;L2errorUV = "<<  L2errorUV[n] <<" ;H1errorETA = "<<  H1errorETA[n] <<" ;H1errorUV = "<<  H1errorUV[n] <<endl;
    else
-      cout <<Time[n]<<"s;"<<"N = "<<N<<" ;L2errorETA = "<<  L2errorETA[n] <<" ;L2errorUV = "<<  L2errorUV[n] <<" ;H1errorETA = "<<  H1errorETA[n]<<" ;H1errorUV = "<<  H1errorUV[n] <<" ;Rate ETA L2= "<< log(L2errorETA[n-1]/L2errorETA[n])/log(Dt[n-1]/Dt[n])<<" ;Rate UV L2= "<< log(L2errorUV[n-1]/L2errorUV[n])/log(Dt[n-1]/Dt[n])<<" ;Rate ETA H1= "<< log(H1errorETA[n-1]/H1errorETA[n])/log(Dt[n-1]/Dt[n])<<" ;Rate UV H1= "<< log(H1errorUV[n-1]/H1errorUV[n])/log(Dt[n-1]/Dt[n])  <<endl;
+      cout <<Time[n]<<"s;"<<"Np = "<<Npx<<" ;L2errorETA = "<<  L2errorETA[n] <<" ;L2errorUV = "<<  L2errorUV[n] <<" ;H1errorETA = "<<  H1errorETA[n]<<" ;H1errorUV = "<<  H1errorUV[n] <<" ;Rate ETA L2= "<< log(L2errorETA[n-1]/L2errorETA[n])/log(Dt[n-1]/Dt[n])<<" ;Rate UV L2= "<< log(L2errorUV[n-1]/L2errorUV[n])/log(Dt[n-1]/Dt[n])<<" ;Rate ETA H1= "<< log(H1errorETA[n-1]/H1errorETA[n])/log(Dt[n-1]/Dt[n])<<" ;Rate UV H1= "<< log(H1errorUV[n-1]/H1errorUV[n])/log(Dt[n-1]/Dt[n])  <<endl;
 
    { 
       ofstream outv("rate_sBBM_RK2.txt",append);
       if (n==0){
-         outv <<"\\\\ \\hline "<< N <<" & "<< L2errorETA[n] <<" & - & "<< L2errorUV[n] <<" & - & "<<  H1errorETA[n] <<" & - & "<<  H1errorUV[n] <<" & -" <<"% & " <<Time[n]<< endl;
+         outv <<"\\\\ \\hline "<< Npx <<" & "<< L2errorETA[n] <<" & - & "<< L2errorUV[n] <<" & - & "<<  H1errorETA[n] <<" & - & "<<  H1errorUV[n] <<" & -" <<"% & " <<Time[n]<< endl;
       } else
-         outv <<"\\\\ \\hline "<< N <<" & "<< L2errorETA[n] <<" & " << log(L2errorETA[n-1]/L2errorETA[n])/log(Dt[n-1]/Dt[n]) <<" & "<< L2errorUV[n] <<" & "<< log(L2errorUV[n-1]/L2errorUV[n])/log(Dt[n-1]/Dt[n]) <<" & "<<  H1errorETA[n] <<" & "<< log(H1errorETA[n-1]/H1errorETA[n])/log(Dt[n-1]/Dt[n]) <<" & "<<  H1errorUV[n] <<" & "<< log(H1errorUV[n-1]/H1errorUV[n])/log(Dt[n-1]/Dt[n])<<"% & " <<Time[n]<< endl;
+         outv <<"\\\\ \\hline "<< Npx <<" & "<< L2errorETA[n] <<" & " << log(L2errorETA[n-1]/L2errorETA[n])/log(Dt[n-1]/Dt[n]) <<" & "<< L2errorUV[n] <<" & "<< log(L2errorUV[n-1]/L2errorUV[n])/log(Dt[n-1]/Dt[n]) <<" & "<<  H1errorETA[n] <<" & "<< log(H1errorETA[n-1]/H1errorETA[n])/log(Dt[n-1]/Dt[n]) <<" & "<<  H1errorUV[n] <<" & "<< log(H1errorUV[n-1]/H1errorUV[n])/log(Dt[n-1]/Dt[n])<<"% & " <<Time[n]<< endl;
    }
 }
 ofstream outmatlab("rate_sBBM_RK2_Matlab.txt");

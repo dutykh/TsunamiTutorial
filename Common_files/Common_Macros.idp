@@ -1,0 +1,130 @@
+macro grad(u)[dx(u),dy(u)]//
+macro div(u,v)(dx(u)+dy(v))//
+macro movedegkmX(x0,y0)( (x0-lon0)*cos(y0*pi/180.)*coefl0 ) //
+macro movedegkmY(y0)( (y0-lat0)*coefl0 ) //
+macro heaviside(t)(0.*(t<0.) + .5*(t==0.) + 1.*(t>0.))//
+
+macro solveproblem
+   solve fk1([etak1,uk1,vk1],[te,tu,tv],solver=GMRES,init=op) = 
+      int2d(Th)( (etak1 * te + b * h2 * grad(etak1)' * grad(te)) ) - int2d(Th)( dt * F(eta,u,v,te) )
+      + int2d(Th)( (uk1 * tu + 2.*d*[hhx,hhy]'*grad(uk1)*tu + d * h2 * grad(uk1)' * grad(tu)) ) - int2d(Th)( dt * G(eta,u,v,tu) )
+      + int2d(Th)( (vk1 * tv + 2.*d*[hhx,hhy]'*grad(vk1)*tv + d * h2 * grad(vk1)' * grad(tv)) ) - int2d(Th)( dt * H(eta,u,v,tv) )
+      BCk1 ;
+   
+   [etapk1,upk1,vpk1]=[eta+etak1,u+uk1,v+vk1];
+   
+   solve fk2([etak2,uk2,vk2],[te,tu,tv],solver=GMRES,init=op) = 
+      int2d(Th)( (etak2 * te + b * h2 * grad(etak2)' * grad(te)) ) - int2d(Th)( dt * F(etapk1,upk1,vpk1,te) )
+      + int2d(Th)( (uk2 * tu + 2.*d*[hhx,hhy]'*grad(uk2)*tu + d * h2 * grad(uk2)' * grad(tu)) ) - int2d(Th)( dt * G(etapk1,upk1,vpk1,tu) )
+      + int2d(Th)( (vk2 * tv + 2.*d*[hhx,hhy]'*grad(vk2)*tv + d * h2 * grad(vk2)' * grad(tv)) ) - int2d(Th)( dt * H(etapk1,upk1,vpk1,tv) )
+      BCk2 ;
+   
+   [eta,u,v]=[eta+(etak1+etak2)/2.,u+(uk1+uk2)/2.,v+(vk1+vk2)/2.];
+//
+
+//==================================================================
+// creates specific folders for the run for writing the output files
+//==================================================================
+
+macro createDIR(dircase)
+   string DIRold,DIRRST,dircasedata,dircaseRST,dircaseMedit,dircaseParaview,dircaseGnuplot,dirrun;
+   DIRold = dircase+"Data_RST-"+filenameRST+"/";
+   DIRRST = DIRold+"RST/";
+   dircasedata = dircase+"Data_RST-"+IFrestart+"/";
+   dircaseRST = dircasedata+"RST/";
+   dircaseMedit = dircasedata+"Medit/";
+   dircaseParaview = dircasedata+"Paraview/";
+   dircaseGnuplot = dircasedata+"Gnuplot/";
+   dirrun = dircase+"RUNPARAM_RST-"+IFrestart+"/";
+
+   {
+      cout<<"======================================================="<<endl;
+      if(isdir(dircase) < 0){
+         mkdir(dircase);
+         cout<<"======== Directory "<<dircase<<" was created !!"<< endl;
+      }
+      else if(isdir(dircase) > 0){
+         cout<<"======== Directory "<<dircase<<" already exists !!"<<endl;
+      } else
+         cout<<"======== !!!!! "<<dircase<<" is a file !! directory not created "<<endl;
+      cout<<"======================================================="<<endl;
+      mkdir(dircasedata);
+      mkdir(dircaseRST);
+      if(Medit) mkdir(dircaseMedit);
+      if(Paraview) mkdir(dircaseParaview);
+      mkdir(dircaseGnuplot);
+      mkdir(dirrun);
+      exec("cp *.edp "+dirrun);
+      exec("cp -r ../Common_files "+dirrun);
+   }
+   {
+      ofstream fcontd(dircase+"zz.contd");
+      fcontd << 0 <<endl;
+   }
+/* Stop the program by user */
+   int STOP=1;
+// EOM
+
+//===============================================================
+// saves files for restart
+//===============================================================
+
+macro SaveRST(dir,v1,v2,Th,i,time,itsave)
+{
+   ofstream fv(dir+"RST-"+funciterdigits(i,8)+".rst");
+   if(adapt) savemesh(Th,dir+"RSTTh-"+funciterdigits(i,8)+".msh");
+   real[int] tab=[time,itsave];
+   fv.write(tab);
+   fv.write(v1[0][]);
+   fv.write(v2[]);
+   cout << " -- Save "<< time << " itera =" << i << endl;
+}
+//
+
+//===============================================================
+// reads files that will be used to restart a computation
+//===============================================================
+
+macro ReadRST(dir,v1,v2,Th,i,time,itsave)
+{
+   ifstream fv(dir+"RST-"+funciterdigits(i,8)+".rst");
+   if(adapt) Th=readmesh(dir+"RSTTh-"+funciterdigits(i,8)+".msh");
+   real[int] tab(1);
+   fv.read(tab);
+   time=tab[0]; itsave=tab[1];
+   v1=[0,0,0];
+   v2=0;
+   fv.read(v1[0][]);
+   fv.read(v2[]);
+   cout << " -- Read " << " time = " << time << " itera =" << i << endl;
+}
+//
+
+//===============================================================
+// clean stop decided by the user : if the content of the file "zz.contd" is changed to "1"
+// the run will be stopped and the data files saved before quitting
+//===============================================================
+
+macro cleanstop(dir)
+{
+   int icontd=1;
+   {
+      ifstream fcontd(dir+"zz.contd");
+      fcontd >> icontd;
+   }
+   if(icontd){
+      cout << " "<<endl<<"/!\ job stopped by user at iter = " << iter << endl<<" "<<endl;
+      SaveRST(dircaseRST,[eta,u,v],MAX,Th,iter,t,itsave);
+      STOP=0;
+   }
+}
+//
+
+/* functions to transform an int into char (used for the names of files) */
+func string funciterdigits(int iter,int digits)
+{ string rs="";
+   for(int i=0;i<(digits-string(iter).length);i++)
+      rs=rs+"0";
+   rs=rs+string(iter);
+   return rs;
+}
