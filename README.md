@@ -47,6 +47,28 @@ where Oᵢ is Okada's solution for the subfault i, H the Heaviside function, τ 
 rupture, spreading from the epicentre at 1.1 km/s, reaches the subfault. The domain adaptation starts the computation
 on a small part of the mesh around the source and adds to it layers of the full mesh as the waves spread.
 
+## A correction for vertical faults
+
+Okada's general expressions for the functions I1, I3, I4 and I5 divide by cos δ, where δ is the dip of the fault, and
+lose all accuracy to rounding as the dip approaches 90°: for a vertical fault, the version of `Common_files/OkadaSol.edp`
+archived on Zenodo returns meaningless displacements (on a test grid, the horizontal component v exceeds its true size by
+a factor 10¹⁵). Since November 2026, when |cos δ| < 10⁻⁵, the script uses instead the forms that Okada (1992, Table 6)
+gives for cos δ = 0, in the notation of the code, with m = μ/(λ + μ):
+
+```text
+I1 = −(m/2) ξ q / (R + dbar)²,
+I3 =  (m/2) (η / (R + dbar) + ybar q / (R + dbar)² − ln(R + η)),
+I4 = −m q / (R + dbar),
+I5 = −m ξ sin δ / (R + dbar),            I2 = −m ln(R + η) − I3 as before,
+
+q = Y sin δ − d cos δ,   R² = ξ² + η² + q²,   dbar = η sin δ − q cos δ,   ybar = η cos δ + q sin δ.
+```
+
+On 81 points around a fault of 60 km by 40 km, the corrected script agrees with the MATLAB function `OkadaSol.m`,
+corrected in the same way, to rounding errors (relative differences below 4 × 10⁻¹⁵) at the dips 13°, 60°, 89.9999° and
+90°. The dips of the shipped cases, 7° and 10.35°, are far from 90°, and their results are unchanged: the first 90 s of
+the passive Java case give the same records at the wave gauges as before.
+
 ## Running the scripts
 
 Each script is run with FreeFem++ from its own folder, with the options given in its header: `-ns` (the script is not
@@ -85,7 +107,7 @@ of the article (`"Adapt_GS"`, the default), the mesh adaptation of FreeFem++ (`"
 | Folder or file | Contents |
 |---|---|
 | `Mesh_generation/` | `mesh_photo_xyz_generate.edp` (the mesh of the sea, from a picture or from bathymetric data, whose coastline is the zero level of a regularised indicator of the sea), the picture `mediterannee.pgm` of the Mediterranean Sea and the test picture `complex.pgm` |
-| `Common_files/` | `Common_Macros.idp` (the Runge–Kutta step, the output folders, the restart and the clean stop), `OkadaSol.edp` (Okada's solution), `adapt_GS.edp` (the domain adaptation of the article), `java2006-787.xyz` (the bathymetry around Java: longitude, latitude and elevation in metres) and `ffault_ext.txt` (the 147 subfaults of the 2006 Java earthquake); the meshes are written here |
+| `Common_files/` | `Common_Macros.idp` (the Runge–Kutta step, the output folders, the restart and the clean stop), `OkadaSol.edp` (Okada's solution, with the forms of a vertical fault since November 2026), `adapt_GS.edp` (the domain adaptation of the article), `java2006-787.xyz` (the bathymetry around Java: longitude, latitude and elevation in metres) and `ffault_ext.txt` (the 147 subfaults of the 2006 Java earthquake); the meshes are written here |
 | `Tsunami_Java_Passive/`, `Tsunami_Java_Active/`, `Tsunami_Mediterannee/` | the three tsunami computations |
 | `Java_bottom_displacement/` | the motion of the sea floor during the Java earthquake |
 | `Convergence/` | `sBBM_rate.edp` (the convergence test), `sBBM_RHS.edp` (the exact solution and the source terms it requires) and the Maple worksheet `exact_sol_sBBM.mw`, which computes them |
@@ -135,13 +157,17 @@ bottom for the generation and propagation of tsunami waves, Mathematics and Comp
 the displacement of the sea floor is computed from Y. Okada, Surface deformation due to shear and tensile faults in a
 half-space, Bulletin of the Seismological Society of America 75, 1135–1154 (1985); and the subfaults of the 2006 Java
 earthquake are those of D. Dutykh, D. Mitsotakis, X. Gardeil and F. Dias, On the use of the finite fault solution for
-tsunami generation problems, Theoretical and Computational Fluid Dynamics 27, 177–199 (2013).
+tsunami generation problems, Theoretical and Computational Fluid Dynamics 27, 177–199 (2013). The forms used for a
+vertical fault are those of Y. Okada, Internal deformation due to shear and tensile faults in a half-space, Bulletin of
+the Seismological Society of America 82, 1018–1040 (1992).
 
 https://doi.org/10.1016/j.matcom.2009.08.029
 
 https://doi.org/10.1785/bssa0750041135
 
 https://doi.org/10.1007/s00162-011-0252-8
+
+https://doi.org/10.1785/BSSA0820021018
 
 ## Licence
 

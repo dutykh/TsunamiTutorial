@@ -82,6 +82,18 @@ references:
     year: 1985
     doi: "10.1785/bssa0750041135"
   - type: article
+    title: "Internal Deformation Due to Shear and Tensile Faults in a Half-Space"
+    authors:
+      - family-names: Okada
+        given-names: Yoshimitsu
+    journal: "Bulletin of the Seismological Society of America"
+    volume: 82
+    issue: "2"
+    start: 1018
+    end: 1040
+    year: 1992
+    doi: "10.1785/BSSA0820021018"
+  - type: article
     title: "On the Use of the Finite Fault Solution for Tsunami Generation Problems"
     authors:
       - family-names: Dutykh
